@@ -1,9 +1,19 @@
-syntax = "proto2";
+syntax = "proto3";
 
 package datastore.pb;
 
 message DataObj {
-        optional string FilePath = 1;
-        optional uint64 Offset = 2;
-        optional uint64 Size = 3;
+  string FilePath = 1;
+  uint64 Offset = 2;
+  uint64 Size = 3;
+}
+
+message FileBlock {
+  string FilePath = 1;
+  uint64 Offset = 2;
+}
+
+message ExtendDataObj {
+  repeated FileBlock Blocks = 1;
+  uint64 Size = 2;
 }

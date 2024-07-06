@@ -134,7 +134,7 @@ func (f *FileManager) GetSize(ctx context.Context, c cid.Cid) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	return int(dobj.GetSize_()), nil
+	return int(dobj.GetSize()), nil
 }
 
 func (f *FileManager) readDataObj(ctx context.Context, m mh.Multihash, d *pb.DataObj) ([]byte, error) {
@@ -188,7 +188,7 @@ func (f *FileManager) readFileDataObj(m mh.Multihash, d *pb.DataObj) ([]byte, er
 		return nil, &CorruptReferenceError{StatusFileError, err}
 	}
 
-	outbuf := make([]byte, d.GetSize_())
+	outbuf := make([]byte, d.GetSize())
 	_, err = io.ReadFull(fi, outbuf)
 	if err == io.EOF || err == io.ErrUnexpectedEOF {
 		return nil, &CorruptReferenceError{StatusFileChanged, err}
@@ -225,7 +225,7 @@ func (f *FileManager) readURLDataObj(ctx context.Context, m mh.Multihash, d *pb.
 		return nil, err
 	}
 
-	req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", d.GetOffset(), d.GetOffset()+d.GetSize_()-1))
+	req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", d.GetOffset(), d.GetOffset()+d.GetSize()-1))
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -238,7 +238,7 @@ func (f *FileManager) readURLDataObj(ctx context.Context, m mh.Multihash, d *pb.
 		}
 	}
 
-	outbuf := make([]byte, d.GetSize_())
+	outbuf := make([]byte, d.GetSize())
 	_, err = io.ReadFull(res.Body, outbuf)
 	if err == io.EOF || err == io.ErrUnexpectedEOF {
 		return nil, &CorruptReferenceError{StatusFileChanged, err}
@@ -309,7 +309,7 @@ func (f *FileManager) putTo(ctx context.Context, b *posinfo.FilestoreNode, to pu
 		dobj.FilePath = filepath.ToSlash(p)
 	}
 	dobj.Offset = b.PosInfo.Offset
-	dobj.Size_ = uint64(len(b.RawData()))
+	dobj.Size = uint64(len(b.RawData()))
 
 	data, err := proto.Marshal(&dobj)
 	if err != nil {
