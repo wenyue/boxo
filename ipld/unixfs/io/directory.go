@@ -502,21 +502,30 @@ func (d *HAMTDirectory) sizeBelowThreshold(ctx context.Context, sizeChange int) 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	below = true
 	for linkResult := range d.EnumLinksAsync(ctx) {
+		// We have already get the result. Just wait for the channel to close.
+		if !below {
+			continue
+		}
+
 		if linkResult.Err != nil {
-			return false, linkResult.Err
+			below = false
+			err = linkResult.Err
+			cancel()
 		}
 
 		partialSize += linksize.LinkSizeFunction(linkResult.Link.Name, linkResult.Link.Cid)
 		if partialSize+sizeChange >= HAMTShardingSize {
 			// We have already fetched enough shards to assert we are
 			//  above the threshold, so no need to keep fetching.
-			return false, nil
+			below = false
+			cancel()
 		}
 	}
 
 	// We enumerated *all* links in all shards and didn't reach the threshold.
-	return true, nil
+	return below, err
 }
 
 // DynamicDirectory wraps a Directory interface and provides extra logic
