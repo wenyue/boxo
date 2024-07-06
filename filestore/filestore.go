@@ -182,19 +182,17 @@ func (f *Filestore) Has(ctx context.Context, c cid.Cid) (bool, error) {
 // delegated to the FileManager, while the rest of blocks
 // are handled by the regular blockstore.
 func (f *Filestore) Put(ctx context.Context, b blocks.Block) error {
-	has, err := f.Has(ctx, b.Cid())
-	if err != nil {
-		return err
-	}
-
-	if has {
-		return nil
-	}
-
 	switch b := b.(type) {
 	case *posinfo.FilestoreNode:
 		return f.fm.Put(ctx, b)
 	default:
+		has, err := f.bs.Has(ctx, b.Cid())
+		if err != nil {
+			return err
+		}
+		if has {
+			return nil
+		}
 		return f.bs.Put(ctx, b)
 	}
 }
@@ -206,19 +204,17 @@ func (f *Filestore) PutMany(ctx context.Context, bs []blocks.Block) error {
 	var fstores []*posinfo.FilestoreNode
 
 	for _, b := range bs {
-		has, err := f.Has(ctx, b.Cid())
-		if err != nil {
-			return err
-		}
-
-		if has {
-			continue
-		}
-
 		switch b := b.(type) {
 		case *posinfo.FilestoreNode:
 			fstores = append(fstores, b)
 		default:
+			has, err := f.bs.Has(ctx, b.Cid())
+			if err != nil {
+				return err
+			}
+			if has {
+				continue
+			}
 			normals = append(normals, b)
 		}
 	}

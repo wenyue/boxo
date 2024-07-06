@@ -150,7 +150,7 @@ func listAll(ctx context.Context, fs *Filestore, verify bool) (func(context.Cont
 	}, nil
 }
 
-func next(qr dsq.Results) (mh.Multihash, *pb.DataObj, error) {
+func next(qr dsq.Results) (mh.Multihash, *pb.ExtDataObj, error) {
 	v, ok := qr.NextSync()
 	if !ok {
 		return nil, nil, nil
@@ -190,12 +190,17 @@ func listAllFileOrder(ctx context.Context, fs *Filestore, verify bool) (func(con
 				dsKey: v.Key,
 				err:   err,
 			})
+		} else if len(dobj.PosList) == 0 {
+			entries = append(entries, &listEntry{
+				dsKey: v.Key,
+				err:   fmt.Errorf("no pos info in data object"),
+			})
 		} else {
 			entries = append(entries, &listEntry{
 				dsKey:    v.Key,
-				filePath: dobj.GetFilePath(),
-				offset:   dobj.GetOffset(),
-				size:     dobj.GetSize_(),
+				filePath: dobj.GetPosList()[0].GetFilePath(),
+				offset:   dobj.GetPosList()[0].GetOffset(),
+				size:     dobj.GetSize(),
 			})
 		}
 	}
@@ -216,10 +221,9 @@ func listAllFileOrder(ctx context.Context, fs *Filestore, verify bool) (func(con
 			return mkListRes(mhash, nil, v.err)
 		}
 		// now reconstruct the DataObj
-		dobj := pb.DataObj{
-			FilePath: v.filePath,
-			Offset:   v.offset,
-			Size_:    v.size,
+		dobj := pb.ExtDataObj{
+			PosList: []*pb.FilePos{{FilePath: v.filePath, Offset: v.offset}},
+			Size:    v.size,
 		}
 		// now if we could not convert the datastore key return that
 		// error
@@ -257,7 +261,7 @@ func (l listEntries) Less(i, j int) bool {
 	return l[i].filePath < l[j].filePath
 }
 
-func mkListRes(m mh.Multihash, d *pb.DataObj, err error) *ListRes {
+func mkListRes(m mh.Multihash, d *pb.ExtDataObj, err error) *ListRes {
 	status := StatusOk
 	errorMsg := ""
 	if err != nil {
@@ -281,12 +285,20 @@ func mkListRes(m mh.Multihash, d *pb.DataObj, err error) *ListRes {
 		}
 	}
 
+	if len(d.PosList) == 0 {
+		return &ListRes{
+			Status:   status,
+			ErrorMsg: "no pos info in data object",
+			Key:      c,
+		}
+	}
+
 	return &ListRes{
 		Status:   status,
 		ErrorMsg: errorMsg,
 		Key:      c,
-		FilePath: d.FilePath,
-		Size:     d.Size_,
-		Offset:   d.Offset,
+		FilePath: d.GetPosList()[0].GetFilePath(),
+		Offset:   d.GetPosList()[0].GetOffset(),
+		Size:     d.Size,
 	}
 }
