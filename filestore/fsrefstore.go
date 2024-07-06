@@ -10,7 +10,7 @@ import (
 
 	pb "github.com/ipfs/boxo/filestore/pb"
 
-	proto "github.com/gogo/protobuf/proto"
+	gogoproto "github.com/gogo/protobuf/proto"
 	dshelp "github.com/ipfs/boxo/datastore/dshelp"
 	posinfo "github.com/ipfs/boxo/filestore/posinfo"
 	blocks "github.com/ipfs/go-block-format"
@@ -20,6 +20,7 @@ import (
 	dsq "github.com/ipfs/go-datastore/query"
 	ipld "github.com/ipfs/go-ipld-format"
 	mh "github.com/multiformats/go-multihash"
+	proto "google.golang.org/protobuf/proto"
 )
 
 // FilestorePrefix identifies the key prefix for FileManager blocks.
@@ -184,7 +185,7 @@ func (f *FileManager) getDataObj(ctx context.Context, m mh.Multihash) (*pb.ExtDa
 
 func unmarshalOrigDataObj(data []byte) (*pb.DataObj, error) {
 	var dobj pb.DataObj
-	if err := proto.Unmarshal(data, &dobj); err != nil {
+	if err := gogoproto.Unmarshal(data, &dobj); err != nil {
 		return nil, err
 	}
 
