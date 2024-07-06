@@ -195,7 +195,7 @@ func listAllFileOrder(ctx context.Context, fs *Filestore, verify bool) (func(con
 				dsKey:    v.Key,
 				filePath: dobj.GetFilePath(),
 				offset:   dobj.GetOffset(),
-				size:     dobj.GetSize(),
+				size:     dobj.GetSize_(),
 			})
 		}
 	}
@@ -219,7 +219,7 @@ func listAllFileOrder(ctx context.Context, fs *Filestore, verify bool) (func(con
 		dobj := pb.DataObj{
 			FilePath: v.filePath,
 			Offset:   v.offset,
-			Size:    v.size,
+			Size_:    v.size,
 		}
 		// now if we could not convert the datastore key return that
 		// error
@@ -286,7 +286,7 @@ func mkListRes(m mh.Multihash, d *pb.DataObj, err error) *ListRes {
 		ErrorMsg: errorMsg,
 		Key:      c,
 		FilePath: d.FilePath,
-		Size:     d.Size,
+		Size:     d.Size_,
 		Offset:   d.Offset,
 	}
 }
