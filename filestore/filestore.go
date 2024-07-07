@@ -165,6 +165,7 @@ func (f *Filestore) GetSize(ctx context.Context, c cid.Cid) (int, error) {
 // Has returns true if the block with the given Cid is
 // stored in the Filestore.
 func (f *Filestore) Has(ctx context.Context, c cid.Cid) (bool, error) {
+	logger.Error("has: ", c.String())
 	has, err := f.bs.Has(ctx, c)
 	if err != nil {
 		return false, err
@@ -182,6 +183,7 @@ func (f *Filestore) Has(ctx context.Context, c cid.Cid) (bool, error) {
 // delegated to the FileManager, while the rest of blocks
 // are handled by the regular blockstore.
 func (f *Filestore) Put(ctx context.Context, b blocks.Block) error {
+	logger.Error("put: ", b.Cid().String())
 	switch b := b.(type) {
 	case *posinfo.FilestoreNode:
 		return f.fm.Put(ctx, b)
@@ -204,6 +206,7 @@ func (f *Filestore) PutMany(ctx context.Context, bs []blocks.Block) error {
 	var fstores []*posinfo.FilestoreNode
 
 	for _, b := range bs {
+		logger.Error("put many: ", b.Cid().String())
 		switch b := b.(type) {
 		case *posinfo.FilestoreNode:
 			fstores = append(fstores, b)
