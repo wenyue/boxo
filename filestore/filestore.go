@@ -240,4 +240,8 @@ func (f *Filestore) HashOnRead(enabled bool) {
 	f.bs.HashOnRead(enabled)
 }
 
+func (f *Filestore) MigrateToExt(ctx context.Context) error {
+	return f.fm.MigrateToExt(ctx)
+}
+
 var _ blockstore.Blockstore = (*Filestore)(nil)

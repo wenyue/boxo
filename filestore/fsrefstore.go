@@ -202,7 +202,7 @@ func unmarshalDataObj(data []byte) (*pb.ExtDataObj, error) {
 }
 
 func (f *FileManager) readAndFixFileDataObj(
-	ctx context.Context, m mh.Multihash, d *pb.ExtDataObj) (outbuf []byte, err error) {
+	ctx context.Context, m mh.Multihash, d *pb.ExtDataObj) ([]byte, error) {
 	if !f.AllowFiles {
 		return nil, ErrFilestoreNotEnabled
 	}
@@ -250,25 +250,23 @@ func (f *FileManager) readAndFixFileDataObj(
 		return outbuf, nil
 	}
 
-	errPoss := make([]*pb.FilePos, 0)
+	errPoses := make([]*pb.FilePos, 0)
+	var referr *CorruptReferenceError
 	for index, fp := range d.GetPosList() {
-		var referr *CorruptReferenceError
+		var outbuf []byte
 		outbuf, referr = readData(fp, d.GetSize())
 		if referr != nil {
-			err := referr
 			switch referr.Code {
 			case StatusFileError:
-				errPoss = append(errPoss, fp)
-			case StatusFileNotFound:
-			case StatusFileChanged:
-			case StatusOtherError:
+				errPoses = append(errPoses, fp)
+			case StatusFileNotFound, StatusFileChanged, StatusOtherError:
 				//
 			default:
-				logger.Error("unexpected error: %v", err)
+				logger.Error("unexpected error: %v", referr)
 			}
 		} else {
 			if index != 0 {
-				d.PosList = append(d.PosList[index:], errPoss...)
+				d.PosList = append(d.PosList[index:], errPoses...)
 				if err := f.updateFileDataObj(ctx, m, d); err != nil {
 					return nil, err
 				}
@@ -276,7 +274,11 @@ func (f *FileManager) readAndFixFileDataObj(
 			return outbuf, nil
 		}
 	}
-	return nil, err
+	d.PosList = errPoses
+	if err := f.updateFileDataObj(ctx, m, d); err != nil {
+		return nil, err
+	}
+	return nil, referr
 }
 
 func (f *FileManager) updateFileDataObj(
@@ -380,6 +382,37 @@ func (f *FileManager) PutMany(ctx context.Context, bs []*posinfo.FilestoreNode) 
 	}
 
 	return batch.Commit(ctx)
+}
+
+func (f *FileManager) MigrateToExt(ctx context.Context) error {
+	cidCh, err := f.AllKeysChan(ctx)
+	if err != nil {
+		return err
+	}
+	for cid := range cidCh {
+		m := cid.Hash()
+		dobj, err := f.getOrigDataObj(ctx, m)
+		if err != nil {
+			f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+			continue
+		}
+		extdobj := &pb.ExtDataObj{
+			PosList: []*pb.FilePos{{FilePath: dobj.FilePath, Offset: dobj.Offset}},
+			Size:    dobj.Size_,
+		}
+		data, err := proto.Marshal(extdobj)
+		if err != nil {
+			logger.Error("marshal extdobj error: %v", err)
+			f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+			continue
+		}
+		if err := f.ds.Put(ctx, dshelp.MultihashToDsKey(m), data); err != nil {
+			logger.Error("put extdobj error: %v", err)
+			f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+			continue
+		}
+	}
+	return nil
 }
 
 // IsURL returns true if the string represents a valid URL that the
