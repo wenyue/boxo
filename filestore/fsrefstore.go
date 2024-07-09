@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 
 	pb "github.com/ipfs/boxo/filestore/pb"
 
@@ -389,36 +390,52 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for cid := range cidCh {
-		m := cid.Hash()
-		if _, err := f.getDataObj(ctx, m); err == nil {
-			// Already migrated.
-			return nil
-		}
-		// Read original data object.
-		dobj, err := f.getOrigDataObj(ctx, m)
-		if err != nil {
-			f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
-			continue
-		}
-		// Convert to ext data object.
-		extdobj := &pb.ExtDataObj{
-			PosList: []*pb.FilePos{{FilePath: dobj.FilePath, Offset: dobj.Offset}},
-			Size:    dobj.Size_,
-		}
-		// Write ext data object.
-		data, err := proto.Marshal(extdobj)
-		if err != nil {
-			logger.Error("marshal extdobj error: %v", err)
-			f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
-			continue
-		}
-		if err := f.ds.Put(ctx, dshelp.MultihashToDsKey(m), data); err != nil {
-			logger.Error("put extdobj error: %v", err)
-			f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
-			continue
-		}
+
+	// Create a wait group to wait for all workers to finish
+	var wg sync.WaitGroup
+
+	// Create 16 workers
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for cid := range cidCh {
+				m := cid.Hash()
+				if _, err := f.getDataObj(ctx, m); err == nil {
+					// Already migrated.
+					continue
+				}
+				// Read original data object.
+				dobj, err := f.getOrigDataObj(ctx, m)
+				if err != nil {
+					f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+					continue
+				}
+				// Convert to ext data object.
+				extdobj := &pb.ExtDataObj{
+					PosList: []*pb.FilePos{{FilePath: dobj.FilePath, Offset: dobj.Offset}},
+					Size:    dobj.Size_,
+				}
+				// Write ext data object.
+				data, err := proto.Marshal(extdobj)
+				if err != nil {
+					logger.Error("marshal extdobj error: %v", err)
+					f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+					continue
+				}
+				if err := f.ds.Put(ctx, dshelp.MultihashToDsKey(m), data); err != nil {
+					logger.Error("put extdobj error: %v", err)
+					f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+					continue
+				}
+			}
+		}()
 	}
+
+	// Wait for all workers to finish
+	wg.Wait()
+
 	return nil
 }
 
