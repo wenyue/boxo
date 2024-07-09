@@ -391,15 +391,22 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 	}
 	for cid := range cidCh {
 		m := cid.Hash()
+		if _, err := f.getDataObj(ctx, m); err == nil {
+			// Already migrated.
+			return nil
+		}
+		// Read original data object.
 		dobj, err := f.getOrigDataObj(ctx, m)
 		if err != nil {
 			f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
 			continue
 		}
+		// Convert to ext data object.
 		extdobj := &pb.ExtDataObj{
 			PosList: []*pb.FilePos{{FilePath: dobj.FilePath, Offset: dobj.Offset}},
 			Size:    dobj.Size_,
 		}
+		// Write ext data object.
 		data, err := proto.Marshal(extdobj)
 		if err != nil {
 			logger.Error("marshal extdobj error: %v", err)
