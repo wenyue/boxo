@@ -391,19 +391,20 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 		return err
 	}
 
-	batch, err := f.ds.Batch(ctx)
-	if err != nil {
-		return err
-	}
-
 	// Create a wait group to wait for all workers to finish
 	var wg sync.WaitGroup
 
 	// Create 16 workers
-	for i := 0; i < 16; i++ {
+	for i := 0; i < 8; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
+			batch, err := f.ds.Batch(ctx)
+			if err != nil {
+				logger.Error("create batch error: %v", err)
+				return
+			}
 
 			for cid := range cidCh {
 				m := cid.Hash()
@@ -435,13 +436,15 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 					continue
 				}
 			}
+
+			batch.Commit(ctx)
 		}()
 	}
 
 	// Wait for all workers to finish
 	wg.Wait()
 
-	return batch.Commit(ctx)
+	return nil
 }
 
 // IsURL returns true if the string represents a valid URL that the
