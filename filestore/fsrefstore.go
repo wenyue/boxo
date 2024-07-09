@@ -391,6 +391,11 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 		return err
 	}
 
+	batch, err := f.ds.Batch(ctx)
+	if err != nil {
+		return err
+	}
+
 	// Create a wait group to wait for all workers to finish
 	var wg sync.WaitGroup
 
@@ -409,7 +414,7 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 				// Read original data object.
 				dobj, err := f.getOrigDataObj(ctx, m)
 				if err != nil {
-					f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+					batch.Delete(ctx, dshelp.MultihashToDsKey(m))
 					continue
 				}
 				// Convert to ext data object.
@@ -421,12 +426,12 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 				data, err := proto.Marshal(extdobj)
 				if err != nil {
 					logger.Error("marshal extdobj error: %v", err)
-					f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+					batch.Delete(ctx, dshelp.MultihashToDsKey(m))
 					continue
 				}
-				if err := f.ds.Put(ctx, dshelp.MultihashToDsKey(m), data); err != nil {
+				if err := batch.Put(ctx, dshelp.MultihashToDsKey(m), data); err != nil {
 					logger.Error("put extdobj error: %v", err)
-					f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+					batch.Delete(ctx, dshelp.MultihashToDsKey(m))
 					continue
 				}
 			}
@@ -436,7 +441,7 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 	// Wait for all workers to finish
 	wg.Wait()
 
-	return nil
+	return batch.Commit(ctx)
 }
 
 // IsURL returns true if the string represents a valid URL that the
