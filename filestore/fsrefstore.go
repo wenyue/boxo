@@ -295,13 +295,44 @@ func (f *FileManager) updateFileDataObj(
 	}
 }
 
-// Has returns if the FileManager is storing a block reference. It does not
-// validate the data, nor checks if the reference is valid.
+// Has returns if the FileManager is storing a block reference. It would check if the file exists.
 func (f *FileManager) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	// NOTE: interesting thing to consider. Has doesnt validate the data.
 	// So the data on disk could be invalid, and we could think we have it.
-	dsk := dshelp.MultihashToDsKey(c.Hash())
-	return f.ds.Has(ctx, dsk)
+	m := c.Hash()
+	dsk := dshelp.MultihashToDsKey(m)
+	has, err := f.ds.Has(ctx, dsk)
+	if !has || err != nil {
+		return has, err
+	}
+	d, err := f.getDataObj(ctx, m)
+	if err != nil {
+		return false, err
+	}
+	errPoses := make([]*pb.FilePos, 0)
+	for index, fp := range d.GetPosList() {
+		p := filepath.FromSlash(fp.GetFilePath())
+		abspath := filepath.Join(f.root, p)
+		_, err := os.Stat(abspath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				errPoses = append(errPoses, fp)
+			}
+		} else {
+			if index != 0 {
+				d.PosList = append(d.PosList[index:], errPoses...)
+				if err := f.updateFileDataObj(ctx, m, d); err != nil {
+					return false, err
+				}
+			}
+			return true, nil
+		}
+	}
+	d.PosList = errPoses
+	if err := f.updateFileDataObj(ctx, m, d); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 type putter interface {
@@ -394,7 +425,7 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 	// Create a wait group to wait for all workers to finish
 	var wg sync.WaitGroup
 
-	// Create 16 workers
+	// Create 8 workers
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
 		go func() {
