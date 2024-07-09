@@ -202,6 +202,19 @@ func unmarshalDataObj(data []byte) (*pb.ExtDataObj, error) {
 	return &dobj, nil
 }
 
+func (f *FileManager) updateFileDataObj(
+	ctx context.Context, m mh.Multihash, d *pb.ExtDataObj) error {
+	if len(d.PosList) == 0 {
+		return f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
+	} else {
+		data, err := proto.Marshal(d)
+		if err != nil {
+			return err
+		}
+		return f.ds.Put(ctx, dshelp.MultihashToDsKey(m), data)
+	}
+}
+
 func (f *FileManager) readAndFixFileDataObj(
 	ctx context.Context, m mh.Multihash, d *pb.ExtDataObj) ([]byte, error) {
 	if !f.AllowFiles {
@@ -282,19 +295,6 @@ func (f *FileManager) readAndFixFileDataObj(
 	return nil, referr
 }
 
-func (f *FileManager) updateFileDataObj(
-	ctx context.Context, m mh.Multihash, d *pb.ExtDataObj) error {
-	if len(d.PosList) == 0 {
-		return f.ds.Delete(ctx, dshelp.MultihashToDsKey(m))
-	} else {
-		data, err := proto.Marshal(d)
-		if err != nil {
-			return err
-		}
-		return f.ds.Put(ctx, dshelp.MultihashToDsKey(m), data)
-	}
-}
-
 // Has returns if the FileManager is storing a block reference. It would check if the file exists.
 func (f *FileManager) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	// NOTE: interesting thing to consider. Has doesnt validate the data.
@@ -314,6 +314,7 @@ func (f *FileManager) Has(ctx context.Context, c cid.Cid) (bool, error) {
 		p := filepath.FromSlash(fp.GetFilePath())
 		abspath := filepath.Join(f.root, p)
 		_, err := os.Stat(abspath)
+		fmt.Println("wenyue ", abspath, " ", err)
 		if err != nil {
 			if !os.IsNotExist(err) {
 				errPoses = append(errPoses, fp)
