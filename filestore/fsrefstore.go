@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"sync"
 
 	pb "github.com/ipfs/boxo/filestore/pb"
@@ -154,7 +153,6 @@ func (f *FileManager) readDataObj(
 	if f.AllowUrls {
 		return nil, ErrUrlstoreNotSupported
 	}
-	fmt.Println("readDataObj", m.String())
 	return f.readAndFixFileDataObj(ctx, m, d)
 }
 
@@ -286,12 +284,9 @@ func (f *FileManager) readAndFixFileDataObj(
 					return nil, err
 				}
 			}
-			fmt.Println("readAndFixFileDataObj success,", m.String())
 			return outbuf, nil
 		}
 	}
-	fmt.Println("readAndFixFileDataObj failed,", m.String(), len(errPoses), errPoses)
-	debug.PrintStack()
 	d.PosList = errPoses
 	if err := f.updateFileDataObj(ctx, m, d); err != nil {
 		return nil, err
@@ -299,43 +294,47 @@ func (f *FileManager) readAndFixFileDataObj(
 	return nil, ipld.ErrNotFound{Cid: cid.NewCidV1(cid.Raw, m)}
 }
 
-// Has returns if the FileManager is storing a block reference. It would check if the file exists.
+// Has returns if the FileManager is storing a block reference. It does not
+// validate the data, nor checks if the reference is valid.
 func (f *FileManager) Has(ctx context.Context, c cid.Cid) (bool, error) {
+	// NOTE: interesting thing to consider. Has doesnt validate the data.
+	// So the data on disk could be invalid, and we could think we have it.
 	m := c.Hash()
 	dsk := dshelp.MultihashToDsKey(m)
-	has, err := f.ds.Has(ctx, dsk)
-	fmt.Println("Has", m.String(), has, err)
-	if !has || err != nil {
-		return has, err
-	}
-	d, err := f.getDataObj(ctx, m)
-	if err != nil {
-		return false, err
-	}
-	errPoses := make([]*pb.FilePos, 0)
-	for index, fp := range d.GetPosList() {
-		p := filepath.FromSlash(fp.GetFilePath())
-		abspath := filepath.Join(f.root, p)
-		_, err := os.Stat(abspath)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				errPoses = append(errPoses, fp)
-			}
-		} else {
-			if index != 0 {
-				d.PosList = append(d.PosList[index:], errPoses...)
-				if err := f.updateFileDataObj(ctx, m, d); err != nil {
-					return false, err
-				}
-			}
-			return true, nil
-		}
-	}
-	d.PosList = errPoses
-	if err := f.updateFileDataObj(ctx, m, d); err != nil {
-		return false, err
-	}
-	return false, nil
+	return f.ds.Has(ctx, dsk)
+	/// Check if the file exists.
+	// has, err := f.ds.Has(ctx, dsk)
+	// if !has || err != nil {
+	// 	return has, err
+	// }
+	// d, err := f.getDataObj(ctx, m)
+	// if err != nil {
+	// 	return false, err
+	// }
+	// errPoses := make([]*pb.FilePos, 0)
+	// for index, fp := range d.GetPosList() {
+	// 	p := filepath.FromSlash(fp.GetFilePath())
+	// 	abspath := filepath.Join(f.root, p)
+	// 	_, err := os.Stat(abspath)
+	// 	if err != nil {
+	// 		if !os.IsNotExist(err) {
+	// 			errPoses = append(errPoses, fp)
+	// 		}
+	// 	} else {
+	// 		if index != 0 {
+	// 			d.PosList = append(d.PosList[index:], errPoses...)
+	// 			if err := f.updateFileDataObj(ctx, m, d); err != nil {
+	// 				return false, err
+	// 			}
+	// 		}
+	// 		return true, nil
+	// 	}
+	// }
+	// d.PosList = errPoses
+	// if err := f.updateFileDataObj(ctx, m, d); err != nil {
+	// 	return false, err
+	// }
+	// return false, nil
 }
 
 type putter interface {
