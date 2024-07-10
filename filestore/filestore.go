@@ -10,6 +10,7 @@ package filestore
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	blockstore "github.com/ipfs/boxo/blockstore"
 	posinfo "github.com/ipfs/boxo/filestore/posinfo"
@@ -165,6 +166,7 @@ func (f *Filestore) GetSize(ctx context.Context, c cid.Cid) (int, error) {
 // Has returns true if the block with the given Cid is
 // stored in the Filestore.
 func (f *Filestore) Has(ctx context.Context, c cid.Cid) (bool, error) {
+	fmt.Println("Has begin", c.Hash().String())
 	has, err := f.bs.Has(ctx, c)
 	if err != nil {
 		return false, err
