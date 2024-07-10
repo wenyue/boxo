@@ -267,10 +267,9 @@ func (f *FileManager) readAndFixFileDataObj(
 	}
 
 	errPoses := make([]*pb.FilePos, 0)
-	var referr *CorruptReferenceError
 	for index, fp := range d.GetPosList() {
 		var outbuf []byte
-		outbuf, referr = readData(fp, d.GetSize())
+		outbuf, referr := readData(fp, d.GetSize())
 		if referr != nil {
 			switch referr.Code {
 			case StatusFileError:
@@ -291,13 +290,13 @@ func (f *FileManager) readAndFixFileDataObj(
 			return outbuf, nil
 		}
 	}
-	fmt.Println("readAndFixFileDataObj failed,", m.String(), referr, len(errPoses), errPoses)
+	fmt.Println("readAndFixFileDataObj failed,", m.String(), len(errPoses), errPoses)
 	debug.PrintStack()
 	d.PosList = errPoses
 	if err := f.updateFileDataObj(ctx, m, d); err != nil {
 		return nil, err
 	}
-	return nil, referr
+	return nil, ipld.ErrNotFound{Cid: cid.NewCidV1(cid.Raw, m)}
 }
 
 // Has returns if the FileManager is storing a block reference. It would check if the file exists.
