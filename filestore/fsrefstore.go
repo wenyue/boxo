@@ -286,10 +286,11 @@ func (f *FileManager) readAndFixFileDataObj(
 					return nil, err
 				}
 			}
-			fmt.Println("readAndFixFileDataObj", m.String())
+			fmt.Println("readAndFixFileDataObj success,", m.String())
 			return outbuf, nil
 		}
 	}
+	fmt.Println("readAndFixFileDataObj failed,", m.String(), referr, len(errPoses), errPoses)
 	d.PosList = errPoses
 	if err := f.updateFileDataObj(ctx, m, d); err != nil {
 		return nil, err
