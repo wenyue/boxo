@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 
 	pb "github.com/ipfs/boxo/filestore/pb"
@@ -291,6 +292,7 @@ func (f *FileManager) readAndFixFileDataObj(
 		}
 	}
 	fmt.Println("readAndFixFileDataObj failed,", m.String(), referr, len(errPoses), errPoses)
+	debug.PrintStack()
 	d.PosList = errPoses
 	if err := f.updateFileDataObj(ctx, m, d); err != nil {
 		return nil, err
