@@ -153,7 +153,7 @@ func (f *FileManager) readDataObj(
 	if f.AllowUrls {
 		return nil, ErrUrlstoreNotSupported
 	}
-	fmt.Println("readDataObj ", m.String())
+	fmt.Println("readDataObj", m.String())
 	return f.readAndFixFileDataObj(ctx, m, d)
 }
 
@@ -286,7 +286,7 @@ func (f *FileManager) readAndFixFileDataObj(
 					return nil, err
 				}
 			}
-			fmt.Println("readAndFixFileDataObj ", m.String())
+			fmt.Println("readAndFixFileDataObj", m.String())
 			return outbuf, nil
 		}
 	}
@@ -301,10 +301,10 @@ func (f *FileManager) readAndFixFileDataObj(
 func (f *FileManager) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	// NOTE: interesting thing to consider. Has doesnt validate the data.
 	// So the data on disk could be invalid, and we could think we have it.
-	fmt.Println("Has ", c.String())
 	m := c.Hash()
 	dsk := dshelp.MultihashToDsKey(m)
 	has, err := f.ds.Has(ctx, dsk)
+	fmt.Println("Has", m.String(), has, err)
 	if !has || err != nil {
 		return has, err
 	}
