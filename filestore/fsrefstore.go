@@ -300,8 +300,6 @@ func (f *FileManager) readAndFixFileDataObj(
 
 // Has returns if the FileManager is storing a block reference. It would check if the file exists.
 func (f *FileManager) Has(ctx context.Context, c cid.Cid) (bool, error) {
-	// NOTE: interesting thing to consider. Has doesnt validate the data.
-	// So the data on disk could be invalid, and we could think we have it.
 	m := c.Hash()
 	dsk := dshelp.MultihashToDsKey(m)
 	has, err := f.ds.Has(ctx, dsk)
