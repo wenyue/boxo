@@ -187,7 +187,7 @@ func (f *Filestore) Put(ctx context.Context, b blocks.Block) error {
 		if err := f.fm.Put(ctx, b); err != nil {
 			return err
 		}
-		if err := f.bs.DeleteBlock(ctx, b.Cid()); err != nil {
+		if err := f.bs.DeleteBlock(ctx, b.Cid()); err != nil && !ipld.IsNotFound(err) {
 			return err
 		}
 		return nil
@@ -236,7 +236,7 @@ func (f *Filestore) PutMany(ctx context.Context, bs []blocks.Block) error {
 			return err
 		}
 		for _, b := range fstores {
-			if err := f.bs.DeleteBlock(ctx, b.Cid()); err != nil {
+			if err := f.bs.DeleteBlock(ctx, b.Cid()); err != nil && !ipld.IsNotFound(err) {
 				return err
 			}
 		}
