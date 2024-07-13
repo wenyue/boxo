@@ -373,8 +373,7 @@ func (f *FileManager) putTo(ctx context.Context, b *posinfo.FilestoreNode, to pu
 	switch err.(type) {
 	case nil:
 		if dobj.Size != bs {
-			logger.Errorf("data size mismatch. %d != %d", dobj.Size, bs)
-			dobj.Size = bs
+			return fmt.Errorf("data size mismatch. %d != %d", dobj.Size, bs)
 		}
 	case ipld.ErrNotFound:
 		dobj = &pb.ExtDataObj{Size: bs}
