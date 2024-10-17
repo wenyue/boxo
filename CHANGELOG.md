@@ -18,20 +18,75 @@ The following emojis are used to highlight certain changes:
 
 ### Changed
 
-- `bitswap/server` minor memory use and performance improvements
+- `routing/http/client`: creating delegated routing client with `New` now defaults to querying delegated routing server with `DefaultProtocolFilter`  ([IPIP-484](https://github.com/ipfs/specs/pull/484)) [#689](https://github.com/ipfs/boxo/pull/689)
 
 ### Removed
 
 ### Fixed
 
+- `routing/http/client`: optional address and protocol filter parameters from [IPIP-484](https://github.com/ipfs/specs/pull/484) use human-readable `,` instead of `%2C`. [#688](https://github.com/ipfs/boxo/pull/688)
+
 ### Security
+
+## [v0.24.0]
+
+### Added
+
+* `boxo/bitswap/server`:
+  * A new [`WithWantHaveReplaceSize(n)`](https://pkg.go.dev/github.com/ipfs/boxo/bitswap/server/#WithWantHaveReplaceSize) option can be used with `bitswap.New` to fine-tune cost-vs-performance. It sets the maximum size of a block in bytes up to which the bitswap server will replace a WantHave with a WantBlock response. Setting this to 0 disables this WantHave replacement and means that block sizes are not read when processing WantHave requests. [#672](https://github.com/ipfs/boxo/pull/672)
+* `routing/http`:
+  * added support for address and protocol filtering to the delegated routing server ([IPIP-484](https://github.com/ipfs/specs/pull/484)) [#671](https://github.com/ipfs/boxo/pull/671) [#678](https://github.com/ipfs/boxo/pull/678)
+  * added support for address and protocol filtering to the delegated routing client ([IPIP-484](https://github.com/ipfs/specs/pull/484)) [#678](https://github.com/ipfs/boxo/pull/678). To add filtering to the client, use the [`WithFilterAddrs`](https://pkg.go.dev/github.com/ipfs/boxo/routing/http/client#WithFilterAddrs) and [`WithFilterProtocols`](https://pkg.go.dev/github.com/ipfs/boxo/routing/http/client#WithFilterProtocols) options when creating the client.Client-side filtering for servers that don't support filtering is enabled by default. To disable it, use the [`disableLocalFiltering`](https://pkg.go.dev/github.com/ipfs/boxo/routing/http/client#disableLocalFiltering) option when creating the client.
+
+### Changed
+
+### Removed
+
+### Fixed
+
+- `unixfs/hamt` Log error instead of panic if both link and shard are nil [#393](https://github.com/ipfs/boxo/pull/393)
+
+### Security
+
+## [v0.23.0]
+
+### Added
+
+- `files`, `ipld/unixfs`, `mfs` and `tar` now support optional UnixFS 1.5 mode and modification time metadata [#653](https://github.com/ipfs/boxo/pull/653)
+- `gateway` deserialized responses will have `Last-Modified` set to value from optional UnixFS 1.5 modification time field (if present in DAG) and a matching `If-Modified-Since` will return `304 Not Modified` (UnixFS 1.5 files only) [#659](https://github.com/ipfs/boxo/pull/659)
+
+### Changed
+
+- updated Go in `go.mod` to 1.22 [#661](https://github.com/ipfs/boxo/pull/661)
+- updated go-libp2p to [v0.36.3](https://github.com/libp2p/go-libp2p/releases/tag/v0.36.3)
+- `chunker` refactored to reduce overall memory use by reducing heap fragmentation [#649](https://github.com/ipfs/boxo/pull/649)
+- `bitswap/server` minor performance improvements in concurrent operations [#666](https://github.com/ipfs/boxo/pull/666)
+- removed dependency on go-ipfs-blocksutil [#656](https://github.com/ipfs/boxo/pull/656)
+
+## [v0.22.0]
+
+### Changed
+
+- `go-libp2p` dependency updated to [v0.36 (release notes)](https://github.com/libp2p/go-libp2p/releases/tag/v0.36.1)
+- `bitswap/server` minor memory use and performance improvements [#634](https://github.com/ipfs/boxo/pull/634)
+- `bitswap` unify logger names to use uniform format bitswap/path/pkgname [#637](https://github.com/ipfs/boxo/pull/637)
+- `gateway` now always returns meaningful cache-control headers for generated HTML listings of UnixFS directories [#643](https://github.com/ipfs/boxo/pull/643)
+- `util` generate random test data using `ipfs/go-test` instead of internal util code [#638](https://github.com/ipfs/boxo/pull/638)
+- `bitswap/server` `PeerLedger.Wants` now returns `bool` (interface change from `Wants(p peer.ID, e wl.Entry)` to `Wants(p peer.ID, e wl.Entry) bool`) [#629](https://github.com/ipfs/boxo/pull/629)
+
+### Fixed
+
+- `boxo/gateway` now correctly returns 404 Status Not Found instead of 500 when the requested content cannot be found due to offline exchange, gateway running in no-fetch (non-recursive) mode, or a similar restriction that only serves a specific set of CIDs. [#630](https://github.com/ipfs/boxo/pull/630)
+- `bitswap/client` fix memory leak in BlockPresenceManager due to unlimited map growth. [#636](https://github.com/ipfs/boxo/pull/636)
+- `bitswap/network` fixed race condition when a timeout occurred before hole punching completed while establishing a first-time stream to a peer behind a NAT [#651](https://github.com/ipfs/boxo/pull/651)
+- `bitswap`: wantlist overflow handling now cancels existing entries to make room for newer entries. This fix prevents the wantlist from filling up with CIDs that the server does not have. [#629](https://github.com/ipfs/boxo/pull/629)
 
 ## [v0.21.0]
 
 ### Changed
 
 - `boxo/gateway` is now tested against [gateway-conformance v6](https://github.com/ipfs/gateway-conformance/releases/tag/v0.6.0)
-- `bitswap/client` supports additional tracing 
+- `bitswap/client` supports additional tracing
 
 ### Removed
 

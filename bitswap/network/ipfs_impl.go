@@ -26,9 +26,7 @@ import (
 	"github.com/multiformats/go-multistream"
 )
 
-var log = logging.Logger("bitswap_network")
-
-var connectTimeout = time.Second * 5
+var log = logging.Logger("bitswap/network")
 
 var (
 	maxSendTimeout = 2 * time.Minute
@@ -181,10 +179,13 @@ func (s *streamMessageSender) multiAttempt(ctx context.Context, fn func() error)
 			return err
 		}
 
+		timer := time.NewTimer(s.opts.SendErrorBackoff)
+		defer timer.Stop()
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(s.opts.SendErrorBackoff):
+		case <-timer.C:
 			// wait a short time in case disconnect notifications are still propagating
 			log.Infof("send message to %s failed but context was not Done: %s", s.to, err)
 		}
@@ -323,10 +324,7 @@ func (bsnet *impl) SendMessage(
 	p peer.ID,
 	outgoing bsmsg.BitSwapMessage,
 ) error {
-	tctx, cancel := context.WithTimeout(ctx, connectTimeout)
-	defer cancel()
-
-	s, err := bsnet.newStreamToPeer(tctx, p)
+	s, err := bsnet.newStreamToPeer(ctx, p)
 	if err != nil {
 		return err
 	}

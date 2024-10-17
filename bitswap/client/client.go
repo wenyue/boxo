@@ -38,7 +38,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-var log = logging.Logger("bitswap-client")
+var log = logging.Logger("bitswap/client")
 
 // Option defines the functional option type that can be used to configure
 // bitswap instances
@@ -167,7 +167,6 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, bstore blockstore
 		network:                    network,
 		process:                    px,
 		pm:                         pm,
-		pqm:                        pqm,
 		sm:                         sm,
 		sim:                        sim,
 		notif:                      notif,
@@ -184,7 +183,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, bstore blockstore
 		option(bs)
 	}
 
-	bs.pqm.Startup()
+	pqm.Startup()
 
 	// bind the context and process.
 	// do it over here to avoid closing before all setup is done.
@@ -202,9 +201,6 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, bstore blockstore
 // Client instances implement the bitswap protocol.
 type Client struct {
 	pm *bspm.PeerManager
-
-	// the provider query manager manages requests to find providers
-	pqm *bspqm.ProviderQueryManager
 
 	// network delivers messages on behalf of the session
 	network bsnet.BitSwapNetwork
@@ -499,7 +495,7 @@ func (bs *Client) IsOnline() bool {
 // block requests in a row. The session returned will have it's own GetBlocks
 // method, but the session will use the fact that the requests are related to
 // be more efficient in its requests to peers. If you are using a session
-// from go-blockservice, it will create a bitswap session automatically.
+// from blockservice, it will create a bitswap session automatically.
 func (bs *Client) NewSession(ctx context.Context) exchange.Fetcher {
 	ctx, span := internal.StartSpan(ctx, "NewSession")
 	defer span.End()
