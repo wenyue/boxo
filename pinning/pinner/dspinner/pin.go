@@ -424,6 +424,23 @@ func (p *pinner) Unpin(ctx context.Context, c cid.Cid, recursive bool) error {
 	return p.flushPins(ctx, false)
 }
 
+// Unpin all.
+func (p *pinner) UnpinAll(ctx context.Context) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	if _, err := p.cidDIndex.DeleteAll(ctx); err != nil {
+		return err
+	}
+	if _, err := p.cidRIndex.DeleteAll(ctx); err != nil {
+		return err
+	}
+	if _, err := p.nameIndex.DeleteAll(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
 // IsPinned returns whether or not the given key is pinned
 // and an explanation of why its pinned
 func (p *pinner) IsPinned(ctx context.Context, c cid.Cid) (string, bool, error) {

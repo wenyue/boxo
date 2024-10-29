@@ -513,6 +513,7 @@ func (d *HAMTDirectory) sizeBelowThreshold(ctx context.Context, sizeChange int) 
 			below = false
 			err = linkResult.Err
 			cancel()
+			continue
 		}
 
 		partialSize += linksize.LinkSizeFunction(linkResult.Link.Name, linkResult.Link.Cid)
@@ -521,6 +522,7 @@ func (d *HAMTDirectory) sizeBelowThreshold(ctx context.Context, sizeChange int) 
 			//  above the threshold, so no need to keep fetching.
 			below = false
 			cancel()
+			continue
 		}
 	}
 
