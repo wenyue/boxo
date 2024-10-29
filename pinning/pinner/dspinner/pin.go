@@ -424,7 +424,7 @@ func (p *pinner) Unpin(ctx context.Context, c cid.Cid, recursive bool) error {
 	return p.flushPins(ctx, false)
 }
 
-// Unpin all.
+// UnpinAll removes all pins.
 func (p *pinner) UnpinAll(ctx context.Context) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
