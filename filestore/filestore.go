@@ -24,7 +24,7 @@ import (
 var logger = logging.Logger("filestore")
 
 // The file size less or equal than this value will be stored in the blockstore.
-var SmallFileSize = uint64(256 * units.KiB)
+var SmallFileSize = int64(256 * units.KiB)
 
 var (
 	ErrFilestoreNotEnabled = errors.New("filestore is not enabled, see https://git.io/vNItf")
@@ -188,12 +188,12 @@ func (f *Filestore) Has(ctx context.Context, c cid.Cid) (bool, error) {
 func (f *Filestore) Put(ctx context.Context, b blocks.Block) error {
 	switch b := b.(type) {
 	case *posinfo.FilestoreNode:
-		size, err := b.Size()
-		if err != nil {
-			return err
-		}
-		if size <= SmallFileSize {
-			return f.bs.Put(ctx, b)
+		if b.PosInfo.Stat != nil {
+			if b.PosInfo.Stat.Size() <= SmallFileSize {
+				return f.bs.Put(ctx, b)
+			}
+		} else {
+			logger.Warnln("filestoreNode with nil Stat")
 		}
 		if err := f.fm.Put(ctx, b); err != nil {
 			return err
@@ -216,15 +216,16 @@ func (f *Filestore) PutMany(ctx context.Context, bs []blocks.Block) error {
 	for _, b := range bs {
 		switch b := b.(type) {
 		case *posinfo.FilestoreNode:
+			if b.PosInfo.Stat != nil {
+				if b.PosInfo.Stat.Size() <= SmallFileSize {
+					normals = append(normals, b)
+					break
+				}
+			} else {
+				logger.Warnln("filestoreNode with nil Stat")
+			}
 			fstores = append(fstores, b)
 		default:
-			has, err := f.bs.Has(ctx, b.Cid())
-			if err != nil {
-				return err
-			}
-			if has {
-				continue
-			}
 			normals = append(normals, b)
 		}
 	}
