@@ -192,6 +192,9 @@ func (f *Filestore) Put(ctx context.Context, b blocks.Block) error {
 		}
 		return nil
 	default:
+		if has, err := f.fm.Has(ctx, b.Cid()); has || err != nil {
+			return err
+		}
 		return f.bs.Put(ctx, b)
 	}
 }
@@ -207,7 +210,13 @@ func (f *Filestore) PutMany(ctx context.Context, bs []blocks.Block) error {
 		case *posinfo.FilestoreNode:
 			fstores = append(fstores, b)
 		default:
-			normals = append(normals, b)
+			has, err := f.fm.Has(ctx, b.Cid())
+			if err != nil {
+				return err
+			}
+			if !has {
+				normals = append(normals, b)
+			}
 		}
 	}
 
