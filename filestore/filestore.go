@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/docker/go-units"
 	blockstore "github.com/ipfs/boxo/blockstore"
 	posinfo "github.com/ipfs/boxo/filestore/posinfo"
 	blocks "github.com/ipfs/go-block-format"
@@ -22,9 +21,6 @@ import (
 )
 
 var logger = logging.Logger("filestore")
-
-// The file size less or equal than this value will be stored in the blockstore.
-var SmallFileSize = int64(256 * units.KiB)
 
 var (
 	ErrFilestoreNotEnabled = errors.New("filestore is not enabled, see https://git.io/vNItf")
@@ -188,13 +184,6 @@ func (f *Filestore) Has(ctx context.Context, c cid.Cid) (bool, error) {
 func (f *Filestore) Put(ctx context.Context, b blocks.Block) error {
 	switch b := b.(type) {
 	case *posinfo.FilestoreNode:
-		if b.PosInfo.Stat != nil {
-			if b.PosInfo.Stat.Size() <= SmallFileSize {
-				return f.bs.Put(ctx, b)
-			}
-		} else {
-			logger.Warnln("filestoreNode with nil Stat")
-		}
 		if err := f.fm.Put(ctx, b); err != nil {
 			return err
 		}
@@ -216,14 +205,6 @@ func (f *Filestore) PutMany(ctx context.Context, bs []blocks.Block) error {
 	for _, b := range bs {
 		switch b := b.(type) {
 		case *posinfo.FilestoreNode:
-			if b.PosInfo.Stat != nil {
-				if b.PosInfo.Stat.Size() <= SmallFileSize {
-					normals = append(normals, b)
-					break
-				}
-			} else {
-				logger.Warnln("filestoreNode with nil Stat")
-			}
 			fstores = append(fstores, b)
 		default:
 			normals = append(normals, b)
