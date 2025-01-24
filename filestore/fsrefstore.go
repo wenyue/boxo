@@ -290,23 +290,23 @@ func (f *FileManager) readAndFixFileDataObj(
 		return outbuf, nil
 	}
 
-	backupPoses := make([]*pb.FilePos, 0)
+	backupPosList := make([]*pb.FilePos, 0)
 	for index, fp := range d.GetPosList() {
 		var outbuf []byte
 		outbuf, referr := readData(fp, d.GetSize())
 		if referr != nil {
 			switch referr.Code {
 			case StatusFileError, StatusFileNotFound:
-				backupPoses = append(backupPoses, fp)
+				backupPosList = append(backupPosList, fp)
 			case StatusFileChanged, StatusOtherError:
-				// Remove the poses from the list.
+				// Remove the positions from the list.
 			default:
 				logger.Error("unexpected error: %v", referr)
 			}
 		} else {
 			if index != 0 {
-				// Move the good pos to the front.
-				d.PosList = append(d.PosList[index:], backupPoses...)
+				// Move the good position to the front.
+				d.PosList = append(d.PosList[index:], backupPosList...)
 				if err := f.updateFileDataObj(ctx, m, d); err != nil {
 					return nil, err
 				}
@@ -316,13 +316,15 @@ func (f *FileManager) readAndFixFileDataObj(
 		}
 	}
 	dirty := false
-	if len(backupPoses) > SafeFilePosNum {
-		// Remove the invalid poses and one backup pos.
-		d.PosList = backupPoses[1:]
+	if len(backupPosList) > SafeFilePosNum {
+		// Remove the invalid positions and the second backup position.
+		// The first one may be the good one, and the last one is the last added.
+		// So we keep them. And remove the second one.
+		d.PosList = append(backupPosList[:1], backupPosList[2:]...)
 		dirty = true
-	} else if len(backupPoses) != len(d.GetPosList()) {
-		// Remove the invalid poses.
-		d.PosList = backupPoses
+	} else if len(backupPosList) != len(d.GetPosList()) {
+		// Remove the invalid positions.
+		d.PosList = backupPosList
 		dirty = true
 	}
 	if dirty {
