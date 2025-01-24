@@ -27,6 +27,7 @@ import (
 // FilestorePrefix identifies the key prefix for FileManager blocks.
 
 const (
+	SafeFilePosNum = 4
 	MaxFilePosNum = 20
 )
 
@@ -264,32 +265,51 @@ func (f *FileManager) readAndFixFileDataObj(
 		return outbuf, nil
 	}
 
-	errPoses := make([]*pb.FilePos, 0)
+	backupPoses := make([]*pb.FilePos, 0)
 	for index, fp := range d.GetPosList() {
 		var outbuf []byte
 		outbuf, referr := readData(fp, d.GetSize())
 		if referr != nil {
 			switch referr.Code {
-			case StatusFileError:
-				errPoses = append(errPoses, fp)
-			case StatusFileNotFound, StatusFileChanged, StatusOtherError:
-				//
+			case StatusFileError, StatusFileNotFound:
+				backupPoses = append(backupPoses, fp)
+			case StatusFileChanged, StatusOtherError:
+				// Remove the poses from the list.
 			default:
 				logger.Error("unexpected error: %v", referr)
 			}
 		} else {
 			if index != 0 {
-				d.PosList = append(d.PosList[index:], errPoses...)
+				// Move the good pos to the front.
+				d.PosList = append(d.PosList[index:], backupPoses...)
 				if err := f.updateFileDataObj(ctx, m, d); err != nil {
 					return nil, err
 				}
 			}
+			// Return the data.
 			return outbuf, nil
 		}
 	}
-	d.PosList = errPoses
+	dirty := false
+	if len(backupPoses) > SafeFilePosNum {
+		// Remove the invalid poses and one backup pos.
+		d.PosList = backupPoses[1:]
+		dirty = true
+	} else if len(backupPoses) != len(d.GetPosList()) {
+		// Remove the invalid poses.
+		d.PosList = backupPoses
+		dirty = true
+	}
+	if dirty {
+		if len(d.GetPosList()) == 0 {
+			if err := f.ds.Delete(ctx, dshelp.MultihashToDsKey(m)); err != nil {
+				return nil, err
+			}
+		} else {
 	if err := f.updateFileDataObj(ctx, m, d); err != nil {
 		return nil, err
+			}
+		}
 	}
 	return nil, ipld.ErrNotFound{Cid: cid.NewCidV1(cid.Raw, m)}
 }
@@ -302,39 +322,6 @@ func (f *FileManager) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	m := c.Hash()
 	dsk := dshelp.MultihashToDsKey(m)
 	return f.ds.Has(ctx, dsk)
-	/// Check if the file exists.
-	// has, err := f.ds.Has(ctx, dsk)
-	// if !has || err != nil {
-	// 	return has, err
-	// }
-	// d, err := f.getDataObj(ctx, m)
-	// if err != nil {
-	// 	return false, err
-	// }
-	// errPoses := make([]*pb.FilePos, 0)
-	// for index, fp := range d.GetPosList() {
-	// 	p := filepath.FromSlash(fp.GetFilePath())
-	// 	abspath := filepath.Join(f.root, p)
-	// 	_, err := os.Stat(abspath)
-	// 	if err != nil {
-	// 		if !os.IsNotExist(err) {
-	// 			errPoses = append(errPoses, fp)
-	// 		}
-	// 	} else {
-	// 		if index != 0 {
-	// 			d.PosList = append(d.PosList[index:], errPoses...)
-	// 			if err := f.updateFileDataObj(ctx, m, d); err != nil {
-	// 				return false, err
-	// 			}
-	// 		}
-	// 		return true, nil
-	// 	}
-	// }
-	// d.PosList = errPoses
-	// if err := f.updateFileDataObj(ctx, m, d); err != nil {
-	// 	return false, err
-	// }
-	// return false, nil
 }
 
 type putter interface {
