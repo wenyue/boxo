@@ -62,6 +62,7 @@ type reprovider struct {
 	statLk                                    sync.Mutex
 	totalProvides, lastReprovideBatchSize     uint64
 	avgProvideDuration, lastReprovideDuration time.Duration
+	lastRun                                   time.Time
 
 	throughputCallback ThroughputCallback
 	// throughputProvideCurrentCount counts how many provides has been done since the last call to throughputCallback
@@ -179,6 +180,17 @@ func KeyProvider(fn KeyChanFunc) Option {
 func DatastorePrefix(k datastore.Key) Option {
 	return func(system *reprovider) error {
 		system.keyPrefix = k
+		return nil
+	}
+}
+
+// MaxBatchSize limit how big each batch is.
+// Some content routers like acceleratedDHTClient have sub linear scalling and
+// bigger sizes are thus faster per elements however smaller batch sizes can
+// limit memory usage spike.
+func MaxBatchSize(n uint) Option {
+	return func(system *reprovider) error {
+		system.maxReprovideBatchSize = n
 		return nil
 	}
 }
@@ -344,7 +356,7 @@ func (s *reprovider) run() {
 			recentAvgProvideDuration := dur / time.Duration(len(keys))
 
 			s.statLk.Lock()
-			s.avgProvideDuration = time.Duration((totalProvideTime + dur) / (time.Duration(s.totalProvides) + time.Duration(len(keys))))
+			s.avgProvideDuration = (totalProvideTime + dur) / (time.Duration(s.totalProvides) + time.Duration(len(keys)))
 			s.totalProvides += uint64(len(keys))
 
 			log.Debugf("finished providing of %d keys. It took %v with an average of %v per provide", len(keys), dur, recentAvgProvideDuration)
@@ -352,6 +364,7 @@ func (s *reprovider) run() {
 			if performedReprovide {
 				s.lastReprovideBatchSize = uint64(len(keys))
 				s.lastReprovideDuration = dur
+				s.lastRun = time.Now()
 
 				s.statLk.Unlock()
 
@@ -444,7 +457,7 @@ func (s *reprovider) Close() error {
 	return err
 }
 
-func (s *reprovider) Provide(cid cid.Cid) error {
+func (s *reprovider) Provide(ctx context.Context, cid cid.Cid, announce bool) error {
 	return s.q.Enqueue(cid)
 }
 
@@ -526,8 +539,9 @@ func (s *reprovider) shouldReprovide() bool {
 }
 
 type ReproviderStats struct {
-	TotalProvides, LastReprovideBatchSize     uint64
-	AvgProvideDuration, LastReprovideDuration time.Duration
+	TotalProvides, LastReprovideBatchSize                        uint64
+	ReprovideInterval, AvgProvideDuration, LastReprovideDuration time.Duration
+	LastRun                                                      time.Time
 }
 
 // Stat returns various stats about this provider system
@@ -537,8 +551,10 @@ func (s *reprovider) Stat() (ReproviderStats, error) {
 	return ReproviderStats{
 		TotalProvides:          s.totalProvides,
 		LastReprovideBatchSize: s.lastReprovideBatchSize,
+		ReprovideInterval:      s.reprovideInterval,
 		AvgProvideDuration:     s.avgProvideDuration,
 		LastReprovideDuration:  s.lastReprovideDuration,
+		LastRun:                s.lastRun,
 	}, nil
 }
 

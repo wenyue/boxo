@@ -6,9 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipld/go-ipld-prime/traversal/selector"
-	"github.com/ipld/go-ipld-prime/traversal/selector/builder"
-
 	testinstance "github.com/ipfs/boxo/bitswap/testinstance"
 	tn "github.com/ipfs/boxo/bitswap/testnet"
 	"github.com/ipfs/boxo/blockservice"
@@ -23,6 +20,8 @@ import (
 	"github.com/ipld/go-ipld-prime/fluent"
 	cidlink "github.com/ipld/go-ipld-prime/linking/cid"
 	basicnode "github.com/ipld/go-ipld-prime/node/basic"
+	"github.com/ipld/go-ipld-prime/traversal/selector"
+	"github.com/ipld/go-ipld-prime/traversal/selector/builder"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,15 +37,16 @@ func TestFetchIPLDPrimeNode(t *testing.T) {
 		})
 	}))
 
-	net := tn.VirtualNetwork(mockrouting.NewServer(), delay.Fixed(0*time.Millisecond))
-	ig := testinstance.NewTestInstanceGenerator(net, nil, nil)
+	routing := mockrouting.NewServer()
+	net := tn.VirtualNetwork(delay.Fixed(0 * time.Millisecond))
+	ig := testinstance.NewTestInstanceGenerator(net, routing, nil, nil)
 	defer ig.Close()
 
 	peers := ig.Instances(2)
 	hasBlock := peers[0]
 	defer hasBlock.Exchange.Close()
 
-	err := hasBlock.Blockstore().Put(bg, block)
+	err := hasBlock.Blockstore.Put(bg, block)
 	require.NoError(t, err)
 
 	err = hasBlock.Exchange.NotifyNewBlocks(bg, block)
@@ -55,7 +55,7 @@ func TestFetchIPLDPrimeNode(t *testing.T) {
 	wantsBlock := peers[1]
 	defer wantsBlock.Exchange.Close()
 
-	wantsGetter := blockservice.New(wantsBlock.Blockstore(), wantsBlock.Exchange)
+	wantsGetter := blockservice.New(wantsBlock.Blockstore, wantsBlock.Exchange)
 	fetcherConfig := bsfetcher.NewFetcherConfig(wantsGetter)
 	session := fetcherConfig.NewSession(context.Background())
 
@@ -87,8 +87,9 @@ func TestFetchIPLDGraph(t *testing.T) {
 		})
 	}))
 
-	net := tn.VirtualNetwork(mockrouting.NewServer(), delay.Fixed(0*time.Millisecond))
-	ig := testinstance.NewTestInstanceGenerator(net, nil, nil)
+	routing := mockrouting.NewServer()
+	net := tn.VirtualNetwork(delay.Fixed(0 * time.Millisecond))
+	ig := testinstance.NewTestInstanceGenerator(net, routing, nil, nil)
 	defer ig.Close()
 
 	peers := ig.Instances(2)
@@ -96,7 +97,7 @@ func TestFetchIPLDGraph(t *testing.T) {
 	defer hasBlock.Exchange.Close()
 
 	blocks := []blocks.Block{block1, block2, block3, block4}
-	err := hasBlock.Blockstore().PutMany(bg, blocks)
+	err := hasBlock.Blockstore.PutMany(bg, blocks)
 	require.NoError(t, err)
 	err = hasBlock.Exchange.NotifyNewBlocks(bg, blocks...)
 	require.NoError(t, err)
@@ -104,7 +105,7 @@ func TestFetchIPLDGraph(t *testing.T) {
 	wantsBlock := peers[1]
 	defer wantsBlock.Exchange.Close()
 
-	wantsGetter := blockservice.New(wantsBlock.Blockstore(), wantsBlock.Exchange)
+	wantsGetter := blockservice.New(wantsBlock.Blockstore, wantsBlock.Exchange)
 	fetcherConfig := bsfetcher.NewFetcherConfig(wantsGetter)
 	session := fetcherConfig.NewSession(context.Background())
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -143,8 +144,9 @@ func TestFetchIPLDPath(t *testing.T) {
 		})
 	}))
 
-	net := tn.VirtualNetwork(mockrouting.NewServer(), delay.Fixed(0*time.Millisecond))
-	ig := testinstance.NewTestInstanceGenerator(net, nil, nil)
+	routing := mockrouting.NewServer()
+	net := tn.VirtualNetwork(delay.Fixed(0 * time.Millisecond))
+	ig := testinstance.NewTestInstanceGenerator(net, routing, nil, nil)
 	defer ig.Close()
 
 	peers := ig.Instances(2)
@@ -152,7 +154,7 @@ func TestFetchIPLDPath(t *testing.T) {
 	defer hasBlock.Exchange.Close()
 
 	blocks := []blocks.Block{block1, block2, block3, block4, block5}
-	err := hasBlock.Blockstore().PutMany(bg, blocks)
+	err := hasBlock.Blockstore.PutMany(bg, blocks)
 	require.NoError(t, err)
 	err = hasBlock.Exchange.NotifyNewBlocks(bg, blocks...)
 	require.NoError(t, err)
@@ -160,7 +162,7 @@ func TestFetchIPLDPath(t *testing.T) {
 	wantsBlock := peers[1]
 	defer wantsBlock.Exchange.Close()
 
-	wantsGetter := blockservice.New(wantsBlock.Blockstore(), wantsBlock.Exchange)
+	wantsGetter := blockservice.New(wantsBlock.Blockstore, wantsBlock.Exchange)
 	fetcherConfig := bsfetcher.NewFetcherConfig(wantsGetter)
 	session := fetcherConfig.NewSession(context.Background())
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -206,9 +208,9 @@ func TestHelpers(t *testing.T) {
 			na.AssembleEntry("nonlink").AssignString("zoo")
 		})
 	}))
-
-	net := tn.VirtualNetwork(mockrouting.NewServer(), delay.Fixed(0*time.Millisecond))
-	ig := testinstance.NewTestInstanceGenerator(net, nil, nil)
+	routing := mockrouting.NewServer()
+	net := tn.VirtualNetwork(delay.Fixed(0 * time.Millisecond))
+	ig := testinstance.NewTestInstanceGenerator(net, routing, nil, nil)
 	defer ig.Close()
 
 	peers := ig.Instances(2)
@@ -216,7 +218,7 @@ func TestHelpers(t *testing.T) {
 	defer hasBlock.Exchange.Close()
 
 	blocks := []blocks.Block{block1, block2, block3, block4}
-	err := hasBlock.Blockstore().PutMany(bg, blocks)
+	err := hasBlock.Blockstore.PutMany(bg, blocks)
 	require.NoError(t, err)
 	err = hasBlock.Exchange.NotifyNewBlocks(bg, blocks...)
 	require.NoError(t, err)
@@ -224,7 +226,7 @@ func TestHelpers(t *testing.T) {
 	wantsBlock := peers[1]
 	defer wantsBlock.Exchange.Close()
 
-	wantsGetter := blockservice.New(wantsBlock.Blockstore(), wantsBlock.Exchange)
+	wantsGetter := blockservice.New(wantsBlock.Blockstore, wantsBlock.Exchange)
 
 	t.Run("Block retrieves node", func(t *testing.T) {
 		fetcherConfig := bsfetcher.NewFetcherConfig(wantsGetter)
@@ -321,8 +323,9 @@ func TestNodeReification(t *testing.T) {
 		na.AssembleEntry("link4").AssignLink(link4)
 	}))
 
-	net := tn.VirtualNetwork(mockrouting.NewServer(), delay.Fixed(0*time.Millisecond))
-	ig := testinstance.NewTestInstanceGenerator(net, nil, nil)
+	routing := mockrouting.NewServer()
+	net := tn.VirtualNetwork(delay.Fixed(0 * time.Millisecond))
+	ig := testinstance.NewTestInstanceGenerator(net, routing, nil, nil)
 	defer ig.Close()
 
 	peers := ig.Instances(2)
@@ -330,7 +333,7 @@ func TestNodeReification(t *testing.T) {
 	defer hasBlock.Exchange.Close()
 
 	blocks := []blocks.Block{block2, block3, block4}
-	err := hasBlock.Blockstore().PutMany(bg, blocks)
+	err := hasBlock.Blockstore.PutMany(bg, blocks)
 	require.NoError(t, err)
 	err = hasBlock.Exchange.NotifyNewBlocks(bg, blocks...)
 	require.NoError(t, err)
@@ -338,7 +341,7 @@ func TestNodeReification(t *testing.T) {
 	wantsBlock := peers[1]
 	defer wantsBlock.Exchange.Close()
 
-	wantsGetter := blockservice.New(wantsBlock.Blockstore(), wantsBlock.Exchange)
+	wantsGetter := blockservice.New(wantsBlock.Blockstore, wantsBlock.Exchange)
 	fetcherConfig := bsfetcher.NewFetcherConfig(wantsGetter)
 	nodeReifier := func(lnkCtx ipld.LinkContext, nd ipld.Node, ls *ipld.LinkSystem) (ipld.Node, error) {
 		return &selfLoader{Node: nd, ctx: lnkCtx.Ctx, ls: ls}, nil

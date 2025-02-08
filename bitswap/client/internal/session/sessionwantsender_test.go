@@ -8,6 +8,7 @@ import (
 
 	bsbpm "github.com/ipfs/boxo/bitswap/client/internal/blockpresencemanager"
 	bspm "github.com/ipfs/boxo/bitswap/client/internal/peermanager"
+	bssim "github.com/ipfs/boxo/bitswap/client/internal/sessioninterestmanager"
 	bsspm "github.com/ipfs/boxo/bitswap/client/internal/sessionpeermanager"
 	cid "github.com/ipfs/go-cid"
 	"github.com/ipfs/go-test/random"
@@ -82,7 +83,7 @@ func (*mockPeerManager) UnregisterSession(uint64)                      {}
 func (*mockPeerManager) BroadcastWantHaves(context.Context, []cid.Cid) {}
 func (*mockPeerManager) SendCancels(context.Context, []cid.Cid)        {}
 
-func (pm *mockPeerManager) SendWants(ctx context.Context, p peer.ID, wantBlocks []cid.Cid, wantHaves []cid.Cid) {
+func (pm *mockPeerManager) SendWants(ctx context.Context, p peer.ID, wantBlocks []cid.Cid, wantHaves []cid.Cid) bool {
 	pm.lk.Lock()
 	defer pm.lk.Unlock()
 
@@ -92,6 +93,7 @@ func (pm *mockPeerManager) SendWants(ctx context.Context, p peer.ID, wantBlocks 
 		pm.peerSends[p] = sw
 	}
 	sw.add(wantBlocks, wantHaves)
+	return true
 }
 
 func (pm *mockPeerManager) waitNextWants() map[peer.ID]*sentWants {
@@ -146,7 +148,8 @@ func TestSendWants(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -180,7 +183,8 @@ func TestSendsWantBlockToOnePeerOnly(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -230,7 +234,8 @@ func TestReceiveBlock(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -283,7 +288,8 @@ func TestCancelWants(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -318,7 +324,8 @@ func TestRegisterSessionWithPeerManager(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -356,7 +363,8 @@ func TestProtectConnFirstPeerToSendWantedBlock(t *testing.T) {
 	pm := newMockPeerManager()
 	fpt := newFakePeerTagger()
 	fpm := bsspm.New(1, fpt)
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -410,7 +418,8 @@ func TestPeerUnavailable(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -469,7 +478,8 @@ func TestPeersExhausted(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 
@@ -542,7 +552,8 @@ func TestPeersExhaustedLastWaitingPeerUnavailable(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 
@@ -589,7 +600,8 @@ func TestPeersExhaustedAllPeersUnavailable(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 
@@ -627,7 +639,8 @@ func TestConsecutiveDontHaveLimit(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -679,7 +692,8 @@ func TestConsecutiveDontHaveLimitInterrupted(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -732,7 +746,8 @@ func TestConsecutiveDontHaveReinstateAfterRemoval(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}
@@ -808,7 +823,8 @@ func TestConsecutiveDontHaveDontRemoveIfHasWantedBlock(t *testing.T) {
 	const sid = uint64(1)
 	pm := newMockPeerManager()
 	fpm := newFakeSessionPeerManager()
-	swc := newMockSessionMgr()
+	sim := bssim.New()
+	swc := newMockSessionMgr(sim)
 	bpm := bsbpm.New()
 	onSend := func(peer.ID, []cid.Cid, []cid.Cid) {}
 	onPeersExhausted := func([]cid.Cid) {}

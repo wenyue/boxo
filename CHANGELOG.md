@@ -18,15 +18,203 @@ The following emojis are used to highlight certain changes:
 
 ### Changed
 
-- `routing/http/client`: creating delegated routing client with `New` now defaults to querying delegated routing server with `DefaultProtocolFilter`  ([IPIP-484](https://github.com/ipfs/specs/pull/484)) [#689](https://github.com/ipfs/boxo/pull/689)
+- upgrade to `go-libp2p` [v0.39.0](https://github.com/libp2p/go-libp2p/releases/tag/v0.39.0)
 
 ### Removed
 
 ### Fixed
 
-- `routing/http/client`: optional address and protocol filter parameters from [IPIP-484](https://github.com/ipfs/specs/pull/484) use human-readable `,` instead of `%2C`. [#688](https://github.com/ipfs/boxo/pull/688)
-
 ### Security
+
+
+## [v0.27.4]
+
+### Fixed
+
+- Fix memory leaks due to not cleaning up wantlists [#829](https://github.com/ipfs/boxo/pull/829), [#833](https://github.com/ipfs/boxo/pull/833)
+- `ipns`: Improved interop with legacy clients by restoring support for `[]byte` CID in `Value` field. `Value()` will convert it to a valid `path.Path`. Empty `Value()` will produce `NoopPath` (`/ipfs/bafkqaaa`) to avoid breaking existing code that expects a valid record to always produce a valid content path. [#830](https://github.com/ipfs/boxo/pull/830)
+
+
+## [v0.27.3]
+
+### Added
+
+- `provider`: Added `ReprovideInterval` and `LastRun` stats to the Reprovider [#815](https://github.com/ipfs/boxo/pull/815)
+
+### Removed
+
+- `bitswap/cllient`: Remove unused tracking of CID for interested sessions. [#821](https://github.com/ipfs/boxo/pull/821)
+
+### Fixed
+
+- `bitswap/client`: Fix runaway goroutine creation under high load. Under high load conditions, goroutines are created faster than they can complete and the more goroutines creates the slower them complete. This creates a positive feedback cycle that ends in OOM. The fix dynamically adjusts message send scheduling to avoid the runaway condition. [#817](https://github.com/ipfs/boxo/pull/817)
+- `bitswap/cllient`: Fix resource leak caused by recording the presence of blocks that no session cares about. [#822](https://github.com/ipfs/boxo/pull/822)
+
+
+## [v0.27.2]
+
+### Fixed
+
+- `bitswap/client`: Reverted attempt to send cancels with excluded peer due to additional issues with wantlist accounting [#809](https://github.com/ipfs/boxo/pull/809)
+
+
+## [v0.27.1]
+
+### Fixed
+
+- `bitswap/client`: Fixed fix sending cancels when excluding peer [#805](https://github.com/ipfs/boxo/pull/805)
+
+
+## [v0.27.0]
+
+### Added
+
+- `gateway` Support for custom DNSLink / DoH resolvers on `localhost` to simplify integration with non-ICANN DNS systems [#645](https://github.com/ipfs/boxo/pull/645)
+
+### Changed
+
+- `gateway`: The default DNSLink resolver for `.eth` TLD changed to `https://dns.eth.limo/dns-query` [#781](https://github.com/ipfs/boxo/pull/781)
+- `gateway`: The default DNSLink resolver for `.crypto` TLD changed to `https://resolver.unstoppable.io/dns-query` [#782](https://github.com/ipfs/boxo/pull/782)
+- upgrade to `go-libp2p-kad-dht` [v0.28.2](https://github.com/libp2p/go-libp2p-kad-dht/releases/tag/v0.28.2)
+- `bitswap/client`: reduce lock scope in messagequeue: lock only needed sections [#787](https://github.com/ipfs/boxo/pull/787)
+- upgrade to `go-libp2p` [v0.38.2](https://github.com/libp2p/go-libp2p/releases/tag/v0.38.2)
+
+### Fixed
+
+- `gateway` Fix redirect URLs for subdirectories with characters that need escaping. [#779](https://github.com/ipfs/boxo/pull/779)
+- `ipns` Fix `ipns` protobuf namespace conflicts by using full package name `github.com/ipfs/boxo/ipns/pb/record.proto` instead of the generic `record.proto` [#794](https://github.com/ipfs/boxo/pull/794)
+- `unixfs` Fix possible crash when modifying directory [#798](https://github.com/ipfs/boxo/pull/798)
+
+
+## [v0.26.0]
+
+### Added
+
+- `bitswap/client`: Improved timeout configuration for block requests
+  - Exposed `DontHaveTimeoutConfig` to hold configuration values for `dontHaveTimeoutMgr` which controls how long to wait for requested block before emitting a synthetic DontHave response
+  - Added `DefaultDontHaveTimeoutConfig()` to return a `DontHaveTimeoutConfig` populated with default values
+  - Added optional `WithDontHaveTimeoutConfig` to allow passing a custom `DontHaveTimeoutConfig`
+  - Setting `SetSendDontHaves(false)` works the same as before. Behind the scenes, it will disable `dontHaveTimeoutMgr` by passing a `nil` `onDontHaveTimeout` to `newDontHaveTimeoutMgr`.
+
+### Changed
+
+- 🛠 `blockstore` and `blockservice`'s `WriteThrough()` option now takes an "enabled" parameter: `WriteThrough(enabled bool)`.
+- Replaced unmaintained mock time implementation uses in tests: [from](github.com/benbjohnson/clock) => [to](github.com/filecoin-project/go-clock)
+- `bitswap/client`: if a libp2p connection has a context, use `context.AfterFunc` to cleanup the connection.
+- upgrade to `go-libp2p-kad-dht` [v0.28.1](https://github.com/libp2p/go-libp2p-kad-dht/releases/tag/v0.28.1)
+- upgrade to `go-libp2p` [v0.38.1](https://github.com/libp2p/go-libp2p/releases/tag/v0.38.1)
+- blockstore/blockservice: change option to `WriteThrough(enabled bool)` [#749](https://github.com/ipfs/boxo/pull/749)
+- `mfs`: improve mfs republisher [#754](https://github.com/ipfs/boxo/pull/754)
+
+### Fixed
+
+- `mfs`: directory cache is now cleared on Flush(), liberating the memory used by the otherwise ever-growing cache. References to directories and sub-directories should be renewed after flushing.
+- `bitswap/client`: Fix leak due to cid queue never getting cleaned up [#756](https://github.com/ipfs/boxo/pull/756)
+- `bitswap`: Drop stream references on Close/Reset [760](https://github.com/ipfs/boxo/pull/760)
+
+
+## [v0.25.0]
+
+### Added
+
+- `routing/http/server`: added built-in Prometheus instrumentation to http delegated `/routing/v1/` endpoints, with custom buckets for response size and duration to match real world data observed at [the `delegated-ipfs.dev` instance](https://docs.ipfs.tech/concepts/public-utilities/#delegated-routing). [#718](https://github.com/ipfs/boxo/pull/718) [#724](https://github.com/ipfs/boxo/pull/724)
+- `routing/http/server`: added configurable routing timeout (`DefaultRoutingTimeout` being 30s) to prevent indefinite hangs during content/peer routing. Set custom duration via `WithRoutingTimeout`. [#720](https://github.com/ipfs/boxo/pull/720)
+- `routing/http/server`: exposes Prometheus metrics on `prometheus.DefaultRegisterer` and a custom one can be provided via `WithPrometheusRegistry` [#722](https://github.com/ipfs/boxo/pull/722)
+- `gateway`: `NewCacheBlockStore` and `NewCarBackend` will use `prometheus.DefaultRegisterer` when a custom one is not specified via `WithPrometheusRegistry` [#722](https://github.com/ipfs/boxo/pull/722)
+- `filestore`: added opt-in `WithMMapReader` option to `FileManager` to enable memory-mapped file reads [#665](https://github.com/ipfs/boxo/pull/665)
+- `bitswap/routing` `ProviderQueryManager` does not require calling `Startup` separate from `New`. [#741](https://github.com/ipfs/boxo/pull/741)
+- `bitswap/routing` ProviderQueryManager does not use lifecycle context.
+
+### Changed
+
+- `bitswap`, `routing`, `exchange` ([#641](https://github.com/ipfs/boxo/pull/641)):
+  - ✨ Bitswap is no longer in charge of providing blocks to the network: providing functionality is now handled by a `exchange/providing.Exchange`, meant to be used with `provider.System` so that all provides follow the same rules (multiple parts of the code where handling provides) before.
+  - 🛠 `bitswap/client/internal/providerquerymanager` has been moved to `routing/providerquerymanager` where it belongs. In order to keep compatibility, Bitswap now receives a `routing.ContentDiscovery` parameter which implements `FindProvidersAsync(...)` and uses it to create a `providerquerymanager` with the default settings as before. Custom settings can be used by using a custom `providerquerymanager` to manually wrap a `ContentDiscovery` object and pass that in as `ContentDiscovery` on initialization while setting `bitswap.WithDefaultProviderQueryManager(false)` (to avoid re-wrapping it again).
+  - The renovated `providedQueryManager` will trigger lookups until it manages to connect to `MaxProviders`. Before it would lookup at most `MaxInProcessRequests*MaxProviders` and connection failures may have limited the actual number of providers found.
+  - 🛠 We have aligned our routing-related interfaces with the libp2p [`routing`](https://pkg.go.dev/github.com/libp2p/go-libp2p/core/routing#ContentRouting) ones, including in the `reprovider.System`.
+  - In order to obtain exactly the same behavior as before (i.e. particularly ensuring that new blocks are still provided), what was done like:
+
+	```go
+		bswapnet := network.NewFromIpfsHost(host, contentRouter)
+		bswap := bitswap.New(p.ctx, bswapnet, blockstore)
+		bserv = blockservice.New(blockstore, bswap)
+	```
+  - becomes:
+
+	```go
+		// Create network: no contentRouter anymore
+		bswapnet := network.NewFromIpfsHost(host)
+		// Create Bitswap: a new "discovery" parameter, usually the "contentRouter"
+		// which does both discovery and providing.
+		bswap := bitswap.New(p.ctx, bswapnet, discovery, blockstore)
+		// A provider system that handles concurrent provides etc. "contentProvider"
+		// is usually the "contentRouter" which does both discovery and providing.
+		// "contentProvider" could be used directly without wrapping, but it is recommended
+		// to do so to provide more efficiently.
+		provider := provider.New(datastore, provider.Online(contentProvider)
+		// A wrapped providing exchange using the previous exchange and the provider.
+		exch := providing.New(bswap, provider)
+
+		// Finally the blockservice
+		bserv := blockservice.New(blockstore, exch)
+		...
+	```
+
+  - The above is only necessary if content routing is needed. Otherwise:
+
+	```go
+		// Create network: no contentRouter anymore
+		bswapnet := network.NewFromIpfsHost(host)
+		// Create Bitswap: a new "discovery" parameter set to nil (disable content discovery)
+		bswap := bitswap.New(p.ctx, bswapnet, nil, blockstore)
+		// Finally the blockservice
+		bserv := blockservice.New(blockstore, exch)
+	```
+- `routing/http/client`: creating delegated routing client with `New` now defaults to querying delegated routing server with `DefaultProtocolFilter`  ([IPIP-484](https://github.com/ipfs/specs/pull/484)) [#689](https://github.com/ipfs/boxo/pull/689)
+- `bitswap/client`: Wait at lease one broadcast interval before resending wants to a peer. Check for peers to rebroadcast to more often than one broadcast interval.
+- No longer using `github.com/jbenet/goprocess` to avoid requiring in dependents. [#710](https://github.com/ipfs/boxo/pull/710)
+- `pinning/remote/client`: Refactor remote pinning `Ls` to take results channel instead of returning one. The previous `Ls` behavior is implemented by the GoLs function, which creates the channels, starts the goroutine that calls Ls, and returns the channels to the caller [#738](https://github.com/ipfs/boxo/pull/738)
+- updated to go-libp2p to [v0.37.2](https://github.com/libp2p/go-libp2p/releases/tag/v0.37.2)
+
+### Fixed
+
+- Do not erroneously update the state of sent wants when a send a peer disconnected and the send did not happen. [#452](https://github.com/ipfs/boxo/pull/452)
+
+## [v0.24.3]
+
+### Changed
+
+- `go.mod` updates
+
+### Fixed
+
+- `bitswap/client` no longer logs `"Received provider X for cid Y not requested` to ERROR level, moved to DEBUG [#771](https://github.com/ipfs/boxo/pull/711)
+
+## [v0.24.2]
+
+### Changed
+
+- updated to go-libp2p to [v0.37.0](https://github.com/libp2p/go-libp2p/releases/tag/v0.37.0)
+- `ipns/pb`: removed use of deprecated `Exporter` (SA1019, [golang/protobuf#1640](https://github.com/golang/protobuf/issues/1640), [9a7055](https://github.com/ipfs/boxo/pull/699/commits/9a7055e444527d5aad3187503a1b84bcae44f7b9))
+
+### Fixed
+
+- `bitswap/client`: fix panic if current live count is greater than broadcast limit [#702](https://github.com/ipfs/boxo/pull/702)
+
+## [v0.24.1]
+
+### Changed
+
+- `routing/http/client`: creating delegated routing client with `New` now defaults to querying delegated routing server with `DefaultProtocolFilter`  ([IPIP-484](https://github.com/ipfs/specs/pull/484)) [#689](https://github.com/ipfs/boxo/pull/689)
+- updated go-libp2p to [v0.36.5](https://github.com/libp2p/go-libp2p/releases/tag/v0.36.5)
+- updated dependencies [#693](https://github.com/ipfs/boxo/pull/693)
+- update `go-libp2p-kad-dht` to [v0.27.0](https://github.com/libp2p/go-libp2p-kad-dht/releases/tag/v0.27.0)
+
+### Fixed
+
+- `routing/http/client`: optional address and protocol filter parameters from [IPIP-484](https://github.com/ipfs/specs/pull/484) use human-readable `,` instead of `%2C`. [#688](https://github.com/ipfs/boxo/pull/688)
+- `bitswap/client` Cleanup live wants when wants are canceled. This prevents live wants from continuing to get rebroadcasted even after the wants are canceled. [#690](https://github.com/ipfs/boxo/pull/690)
+- Fix problem adding invalid CID to exhausted wants list resulting in possible performance issue. [#692](https://github.com/ipfs/boxo/pull/692)
 
 ## [v0.24.0]
 
@@ -44,7 +232,8 @@ The following emojis are used to highlight certain changes:
 
 ### Fixed
 
-- `unixfs/hamt` Log error instead of panic if both link and shard are nil [#393](https://github.com/ipfs/boxo/pull/393)
+- `unixfs/hamt`: Log error instead of panic if both link and shard are nil [#393](https://github.com/ipfs/boxo/pull/393)
+- `pinner/dspinner`: do not hang when listing keys and the `out` channel is no longer read [#727](https://github.com/ipfs/boxo/pull/727)
 
 ### Security
 
@@ -80,6 +269,7 @@ The following emojis are used to highlight certain changes:
 - `bitswap/client` fix memory leak in BlockPresenceManager due to unlimited map growth. [#636](https://github.com/ipfs/boxo/pull/636)
 - `bitswap/network` fixed race condition when a timeout occurred before hole punching completed while establishing a first-time stream to a peer behind a NAT [#651](https://github.com/ipfs/boxo/pull/651)
 - `bitswap`: wantlist overflow handling now cancels existing entries to make room for newer entries. This fix prevents the wantlist from filling up with CIDs that the server does not have. [#629](https://github.com/ipfs/boxo/pull/629)
+- 🛠 `bitswap` & `bitswap/server` no longer provide to content routers, instead you can use the `provider` package because it uses a datastore queue and batches calls to ProvideMany.
 
 ## [v0.21.0]
 
@@ -129,7 +319,7 @@ The following emojis are used to highlight certain changes:
 
 ### Fixed
 
-- 🛠️`routing/http/server`: delegated peer routing endpoint now supports both [PeerID string notaitons from libp2p specs](https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md#string-representation).
+- 🛠️`routing/http/server`: delegated peer routing endpoint now supports both [Peer ID string notations from libp2p specs](https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md#string-representation).
 - `bitswap`: add missing client `WithBlockReceivedNotifier` and `WithoutDuplicatedBlockStats` options to the exchange.
 
 ## [v0.18.0]

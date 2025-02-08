@@ -7,17 +7,14 @@ import (
 
 	bsmsg "github.com/ipfs/boxo/bitswap/message"
 	bsnet "github.com/ipfs/boxo/bitswap/network"
-
-	mockrouting "github.com/ipfs/boxo/routing/mock"
 	blocks "github.com/ipfs/go-block-format"
 	delay "github.com/ipfs/go-ipfs-delay"
-
 	tnet "github.com/libp2p/go-libp2p-testing/net"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 func TestSendMessageAsyncButWaitForResponse(t *testing.T) {
-	net := VirtualNetwork(mockrouting.NewServer(), delay.Fixed(0))
+	net := VirtualNetwork(delay.Fixed(0))
 	responderPeer := tnet.RandIdentityOrFatal(t)
 	waiter := net.Adapter(tnet.RandIdentityOrFatal(t))
 	responder := net.Adapter(responderPeer)

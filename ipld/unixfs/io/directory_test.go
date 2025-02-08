@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,17 +16,15 @@ import (
 	offline "github.com/ipfs/boxo/exchange/offline"
 	mdag "github.com/ipfs/boxo/ipld/merkledag"
 	mdtest "github.com/ipfs/boxo/ipld/merkledag/test"
+	ft "github.com/ipfs/boxo/ipld/unixfs"
+	"github.com/ipfs/boxo/ipld/unixfs/hamt"
+	"github.com/ipfs/boxo/ipld/unixfs/internal"
+	"github.com/ipfs/boxo/ipld/unixfs/private/linksize"
 	blocks "github.com/ipfs/go-block-format"
 	cid "github.com/ipfs/go-cid"
 	ds "github.com/ipfs/go-datastore"
 	dssync "github.com/ipfs/go-datastore/sync"
 	ipld "github.com/ipfs/go-ipld-format"
-
-	ft "github.com/ipfs/boxo/ipld/unixfs"
-	"github.com/ipfs/boxo/ipld/unixfs/hamt"
-	"github.com/ipfs/boxo/ipld/unixfs/internal"
-	"github.com/ipfs/boxo/ipld/unixfs/private/linksize"
-
 	"github.com/stretchr/testify/assert"
 )
 
@@ -438,9 +436,9 @@ func getAllLinksSortedByName(d Directory) ([]*ipld.Link, error) {
 	return entries, nil
 }
 
-func sortLinksByName(l []*ipld.Link) {
-	sort.SliceStable(l, func(i, j int) bool {
-		return strings.Compare(l[i].Name, l[j].Name) == -1 // FIXME: Is this correct?
+func sortLinksByName(links []*ipld.Link) {
+	slices.SortStableFunc(links, func(a, b *ipld.Link) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 }
 

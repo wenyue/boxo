@@ -6,7 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jbenet/goprocess"
+	"github.com/ipfs/boxo/ipns"
+	"github.com/ipfs/boxo/keystore"
+	"github.com/ipfs/boxo/namesys"
+	. "github.com/ipfs/boxo/namesys/republisher"
+	"github.com/ipfs/boxo/path"
+	ds "github.com/ipfs/go-datastore"
+	dssync "github.com/ipfs/go-datastore/sync"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
@@ -14,15 +20,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/stretchr/testify/require"
-
-	"github.com/ipfs/boxo/ipns"
-	"github.com/ipfs/boxo/path"
-	ds "github.com/ipfs/go-datastore"
-	dssync "github.com/ipfs/go-datastore/sync"
-
-	"github.com/ipfs/boxo/keystore"
-	"github.com/ipfs/boxo/namesys"
-	. "github.com/ipfs/boxo/namesys/republisher"
 )
 
 type mockNode struct {
@@ -125,8 +122,8 @@ func TestRepublish(t *testing.T) {
 	repub.Interval = time.Second
 	repub.RecordLifetime = time.Second * 5
 
-	proc := goprocess.Go(repub.Run)
-	defer proc.Close()
+	stop := repub.Run()
+	defer stop()
 
 	// now wait a couple seconds for it to fire
 	time.Sleep(time.Second * 2)
@@ -182,8 +179,8 @@ func TestLongEOLRepublish(t *testing.T) {
 	repub.Interval = time.Millisecond * 500
 	repub.RecordLifetime = time.Second
 
-	proc := goprocess.Go(repub.Run)
-	defer proc.Close()
+	stop := repub.Run()
+	defer stop()
 
 	// now wait a couple seconds for it to fire a few times
 	time.Sleep(time.Second * 2)
