@@ -103,6 +103,9 @@ type Pinner interface {
 	// If the pin doesn't exist, return ErrNotPinned
 	Unpin(ctx context.Context, cid cid.Cid, recursive bool) error
 
+	// UnpinAll removes all pins.
+	UnpinAll(ctx context.Context) error
+
 	// Update updates a recursive pin from one cid to another
 	// this is more efficient than simply pinning the new one and unpinning the
 	// old one

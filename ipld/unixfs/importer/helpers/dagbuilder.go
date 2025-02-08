@@ -17,20 +17,26 @@ import (
 	ipld "github.com/ipfs/go-ipld-format"
 )
 
-var ErrMissingFsRef = errors.New("missing file path or URL, can't create filestore reference")
+var (
+	ErrMissingFsRef = errors.New("missing file path or URL, can't create filestore reference")
+
+	// The file size less or equal than this value will be stored in the blockstore.
+	SmallFileSize = int64(256 * units.KiB)
+)
 
 // DagBuilderHelper wraps together a bunch of objects needed to
 // efficiently create unixfs dag trees
 type DagBuilderHelper struct {
-	dserv       ipld.DAGService
-	spl         chunker.Splitter
-	recvdErr    error
-	rawLeaves   bool
-	nextData    []byte // the next item to return.
-	maxlinks    int
-	cidBuilder  cid.Builder
-	fileMode    os.FileMode
-	fileModTime time.Time
+	dserv         ipld.DAGService
+	spl           chunker.Splitter
+	recvdErr      error
+	rawLeaves     bool
+	nextData      []byte // the next item to return.
+	maxlinks      int
+	cidBuilder    cid.Builder
+	fileMode      os.FileMode
+	fileModTime   time.Time
+	CopySmallFile bool
 
 	// Filestore support variables.
 	// ----------------------------
@@ -72,19 +78,23 @@ type DagBuilderParams struct {
 	// NoCopy signals to the chunker that it should track fileinfo for
 	// filestore adds
 	NoCopy bool
+
+	// CopySmallFile signals that should store the small files to the blockstore
+	CopySmallFile bool
 }
 
 // New generates a new DagBuilderHelper from the given params and a given
 // chunker.Splitter as data source.
 func (dbp *DagBuilderParams) New(spl chunker.Splitter) (*DagBuilderHelper, error) {
 	db := &DagBuilderHelper{
-		dserv:       dbp.Dagserv,
-		spl:         spl,
-		rawLeaves:   dbp.RawLeaves,
-		cidBuilder:  dbp.CidBuilder,
-		maxlinks:    dbp.Maxlinks,
-		fileMode:    dbp.FileMode,
-		fileModTime: dbp.FileModTime,
+		dserv:         dbp.Dagserv,
+		spl:           spl,
+		rawLeaves:     dbp.RawLeaves,
+		cidBuilder:    dbp.CidBuilder,
+		maxlinks:      dbp.Maxlinks,
+		fileMode:      dbp.FileMode,
+		fileModTime:   dbp.FileModTime,
+		CopySmallFile: dbp.CopySmallFile,
 	}
 	if fi, ok := spl.Reader().(files.FileInfo); dbp.NoCopy && ok {
 		db.fullPath = fi.AbsPath()
@@ -241,7 +251,7 @@ func (db *DagBuilderHelper) NewLeafDataNode(fsNodeType pb.Data_DataType) (node i
 // offset is more related to this function).
 func (db *DagBuilderHelper) ProcessFileStore(node ipld.Node, dataSize uint64) ipld.Node {
 	// Check if Filestore is being used.
-	if db.fullPath != "" {
+	if db.fullPath != "" && (!db.CopySmallFile || db.stat.Size() > SmallFileSize){
 		// Check if the node is actually a raw node (needed for
 		// Filestore support).
 		if _, ok := node.(*dag.RawNode); ok {

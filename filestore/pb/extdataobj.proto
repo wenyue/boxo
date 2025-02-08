@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package datastore.pb;
+
+message FilePos {
+  string FilePath = 1;
+  uint64 Offset = 2;
+}
+
+message ExtDataObj {
+  repeated FilePos PosList = 1;
+  uint64 Size = 2;
+}
