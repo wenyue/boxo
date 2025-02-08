@@ -256,7 +256,21 @@ type listEntry struct {
 	err      error
 }
 
-func mkListRes(m mh.Multihash, d *pb.DataObj, err error) *ListRes {
+type listEntries []*listEntry
+
+func (l listEntries) Len() int      { return len(l) }
+func (l listEntries) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
+func (l listEntries) Less(i, j int) bool {
+	if l[i].filePath == l[j].filePath {
+		if l[i].offset == l[j].offset {
+			return l[i].dsKey < l[j].dsKey
+		}
+		return l[i].offset < l[j].offset
+	}
+	return l[i].filePath < l[j].filePath
+}
+
+func mkListRes(m mh.Multihash, d *pb.ExtDataObj, err error) *ListRes {
 	status := StatusOk
 	errorMsg := ""
 	if err != nil {

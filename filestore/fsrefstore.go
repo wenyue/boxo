@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	pb "github.com/ipfs/boxo/filestore/pb"
-
 	gogoproto "github.com/gogo/protobuf/proto"
 	dshelp "github.com/ipfs/boxo/datastore/dshelp"
 	pb "github.com/ipfs/boxo/filestore/pb"

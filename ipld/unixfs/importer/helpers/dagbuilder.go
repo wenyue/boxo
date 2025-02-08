@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/alecthomas/units"
 	chunker "github.com/ipfs/boxo/chunker"
 	"github.com/ipfs/boxo/files"
 	pi "github.com/ipfs/boxo/filestore/posinfo"
