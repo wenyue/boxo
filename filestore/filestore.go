@@ -192,10 +192,11 @@ func (f *Filestore) Put(ctx context.Context, b blocks.Block) error {
 		}
 		return nil
 	default:
-		if has, err := f.fm.Has(ctx, b.Cid()); has || err != nil {
-			return err
+		// The file may have been deleted, so we use Get() instead of Has() to check if it exists.
+		if _, err := f.fm.Get(ctx, b.Cid()); err != nil {
+			return f.bs.Put(ctx, b)
 		}
-		return f.bs.Put(ctx, b)
+		return nil
 	}
 }
 
@@ -210,11 +211,8 @@ func (f *Filestore) PutMany(ctx context.Context, bs []blocks.Block) error {
 		case *posinfo.FilestoreNode:
 			fstores = append(fstores, b)
 		default:
-			has, err := f.fm.Has(ctx, b.Cid())
-			if err != nil {
-				return err
-			}
-			if !has {
+			// The file may have been deleted, so we use Get() instead of Has() to check if it exists.
+			if _, err := f.fm.Get(ctx, b.Cid()); err != nil {
 				normals = append(normals, b)
 			}
 		}
