@@ -81,7 +81,7 @@ func New(ctx context.Context, network bsnet.BitSwapNetwork, bstore blockstore.Bl
 	s.engine = decision.NewEngine(
 		ctx,
 		bstore,
-		network.ConnectionManager(),
+		network,
 		network.Self(),
 		s.engineOptions...,
 	)
@@ -125,14 +125,6 @@ func WithTaskComparator(comparator decision.TaskComparator) Option {
 // Configures the engine to use the given score decision logic.
 func WithScoreLedger(scoreLedger decision.ScoreLedger) Option {
 	o := decision.WithScoreLedger(scoreLedger)
-	return func(bs *Server) {
-		bs.engineOptions = append(bs.engineOptions, o)
-	}
-}
-
-// WithPeerLedger configures the engine with a custom [decision.PeerLedger].
-func WithPeerLedger(peerLedger decision.PeerLedger) Option {
-	o := decision.WithPeerLedger(peerLedger)
 	return func(bs *Server) {
 		bs.engineOptions = append(bs.engineOptions, o)
 	}

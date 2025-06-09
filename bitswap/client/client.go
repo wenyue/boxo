@@ -1,4 +1,4 @@
-// Package bitswap implements the IPFS exchange interface with the BitSwap
+// Package client implements the IPFS exchange interface with the BitSwap
 // bilateral exchange protocol.
 package client
 
@@ -40,6 +40,12 @@ import (
 
 var log = logging.Logger("bitswap/client")
 
+type DontHaveTimeoutConfig = bsmq.DontHaveTimeoutConfig
+
+func DefaultDontHaveTimeoutConfig() *DontHaveTimeoutConfig {
+	return bsmq.DefaultDontHaveTimeoutConfig()
+}
+
 // Option defines the functional option type that can be used to configure
 // bitswap instances
 type Option func(*Client)
@@ -71,7 +77,7 @@ func SetSimulateDontHavesOnTimeout(send bool) Option {
 	}
 }
 
-func WithDontHaveTimeoutConfig(cfg *bsmq.DontHaveTimeoutConfig) Option {
+func WithDontHaveTimeoutConfig(cfg *DontHaveTimeoutConfig) Option {
 	return func(bs *Client) {
 		bs.dontHaveTimeoutConfig = cfg
 	}
@@ -192,11 +198,10 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, providerFinder ro
 			bsmq.WithDontHaveTimeoutConfig(bs.dontHaveTimeoutConfig),
 			bsmq.WithPerPeerSendDelay(bs.perPeerSendDelay))
 	}
-	bs.dontHaveTimeoutConfig = nil
 
 	sim := bssim.New()
 	bpm := bsbpm.New()
-	pm := bspm.New(ctx, peerQueueFactory, network.Self())
+	pm := bspm.New(ctx, peerQueueFactory)
 
 	if bs.providerFinder != nil && bs.defaultProviderQueryManager {
 		// network can do dialing.
@@ -235,7 +240,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, providerFinder ro
 		return bssession.New(sessctx, sessmgr, id, spm, sessionProvFinder, sim, pm, bpm, notif, provSearchDelay, rebroadcastDelay, self)
 	}
 	sessionPeerManagerFactory := func(ctx context.Context, id uint64) bssession.SessionPeerManager {
-		return bsspm.New(id, network.ConnectionManager())
+		return bsspm.New(id, network)
 	}
 	notif := notifications.New()
 	sm = bssm.New(ctx, sessionFactory, sim, sessionPeerManagerFactory, bpm, pm, notif, network.Self())
@@ -300,7 +305,7 @@ type Client struct {
 
 	// whether we should actually simulate dont haves on request timeout
 	simulateDontHavesOnTimeout bool
-	dontHaveTimeoutConfig      *bsmq.DontHaveTimeoutConfig
+	dontHaveTimeoutConfig      *DontHaveTimeoutConfig
 
 	// dupMetric will stay at 0
 	skipDuplicatedBlocksStats bool

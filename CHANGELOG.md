@@ -18,7 +18,128 @@ The following emojis are used to highlight certain changes:
 
 ### Changed
 
-- upgrade to `go-libp2p` [v0.39.0](https://github.com/libp2p/go-libp2p/releases/tag/v0.39.0)
+### Removed
+
+- `bitswap/server` do not allow override of peer ledger with `WithPeerLedger` [#938](https://github.com/ipfs/boxo/pull/938)
+
+### Fixed
+
+- `gateway`: Fixed suffix range-requests and updated tests to [gateway-conformance v0.8](https://github.com/ipfs/gateway-conformance/releases/tag/v0.8.0) [#922](https://github.com/ipfs/boxo/pull/922)
+
+### Security
+
+
+## [v0.31.0]
+
+### Added
+
+- `bitswap/httpnet`: New option `WithMaxDontHaveErrors(int)` (defaults to 100)
+  will trigger disconnections from bitswap peers that cannot provide any of
+  the blocks that are requested for the given number of requests in a
+  row.. This is meant to limit bitswap HTTP-based optimistic requests for
+  blocks to discovered endpoints, which were before considered permanently
+  peered upon discovery.
+
+### Changed
+
+- upgrade to `go-libp2p-kad-dht` [v0.33.1](https://github.com/libp2p/go-libp2p-kad-dht/releases/tag/v0.33.1)
+- deprecated `WithPeerLedger` option for bitswap server. Will remove option in next release. See [issue #928](https://github.com/ipfs/boxo/issues/928)
+- gateway: update backend car traversal to use go-car/v2 [#925](https://github.com/ipfs/boxo/issues/925)
+  - This change may prohibit fetching DAGs from CAR files that have no roots.
+
+
+## [v0.30.0]
+
+### Added
+
+- Control over UnixFS DAG Width
+  - We have made some changes to allow setting custom max width of UnixFS DAGs. This enables users to produce DAGs that follow current and future community conventions (see the [related discussion](https://discuss.ipfs.tech/t/should-we-profile-cids/18507)).
+  - `ipld/unixfs`: `DagModifier` now allows specifying file DAG Width (`MaxLinks`) [#898](https://github.com/ipfs/boxo/pull/898)
+  - `ipld/unixfs/io/directory`: We have made some changes to unixfs directory tooling [#906](https://github.com/ipfs/boxo/pull/906)
+    - We have exposed creator methods for new `BasicDirectory` and `HAMTDirectory`, that complement the existing `NewDirectory()` which creates dynamic directories.
+    - We have added `WithCidBuilder(...)`, `WithMaxLinks(...)`, `WithMaxHAMTFanout(...)` and `WithStat(...)` as options to these new methods so that empty directories can be initilized as wished from the get-go.
+    - `WithMaxLinks(...)` and `WithMaxHAMTFanout(...)` are new options that allow to set a limit to the number of children that a directory DAG node can have. For details on what they exactly do for each of the directory type, please check the documentation.
+  - `mfs` supports as well the new `MaxLinks` and `MaxHAMTFanout` options. They have been made part of the `MkdirOptions` object and the methods `NewEmptyDirectory()` and `NewEmptyRoot()` have been added to facilitate the initialization of MFS objects. [#906](https://github.com/ipfs/boxo/pull/906)
+- `provider`: added support for walking partial DAGs in offline mode [#905](https://github.com/ipfs/boxo/pull/905)
+  - a `KeyChanFunc` that traverses DAGs from a given root (`NewDAGProvider`).
+  - a `KeyChanFunc` that buffers all the CIDs in memory from another `KeyChanFunc` (`NewBufferedProvider`).
+  - `fetcher/impl/blockservice`: new option `SkipNotFound` for the IPLD fetcher. It will skip not found nodes when traversing the DAG. This allows offline traversal of DAGs when using, for example, an offline blockservice.
+  - This enables use case of providing lazy-loaded, partially local DAGs (like `ipfs files` in Kubo's MFS implementation, see [kubo#10386](https://github.com/ipfs/kubo/issues/10386))
+- `gateway`: generated HTML with UnixFS directory listings now include a button for copying CIDs of child entities [#899](https://github.com/ipfs/boxo/pull/899)
+- `bitswap/server`: Add ability to enable/disable bitswap server using `WithServerEnabled` bitswap option (#911)[https://github.com/ipfs/boxo/pull/911]
+
+### Changed
+
+- upgrade to `go-libp2p` [v0.41.1](https://github.com/libp2p/go-libp2p/releases/tag/v0.41.1)
+- `bitswap/network`: Add a new `requests_in_flight` metric gauge that measures how many bitswap streams are being written or read at a given time.
+- improve speed of data onboarding by batching/bufering provider queue writes [#888](https://github.com/ipfs/boxo/pull/888)
+- `provider`: providing queue is now independent from reprovides, speeding up initial provides [#907](https://github.com/ipfs/boxo/pull/907)
+  - renamed `provider.ReproviderStats.TotalProvides` => `provider.ReproviderStats.TotalReprovides`
+  - renamed `provider.ReproviderStats.AvgProvideDuration` => `provider.ReproviderStats.AvgReprovideDuration`
+- `provider/queue` deduplicates CIDs [#910](https://github.com/ipfs/boxo/pull/910)
+
+### Fixed
+
+- `gateway`: query parameters are now supported and preserved in redirects triggered by a [`_redirects`](https://specs.ipfs.tech/http-gateways/web-redirects-file/) file [#886](https://github.com/ipfs/boxo/pull/886)
+- `provider`: adjusted first reprovide timing after node reboot [#890](https://github.com/ipfs/boxo/pull/890)
+- `gateway`: validate configuration and warn when `UseSubdomains=true` is used with IP-based hostnames [#903](https://github.com/ipfs/boxo/pull/903)
+
+
+## [v0.29.1]
+
+### Changed
+
+- `bitswap/httpnet`: do not follow redirects [#878](https://github.com/ipfs/boxo/pull/878)
+- `provider`: provider helper that buffers results to fix issues with slow re-providing [#870](https://github.com/ipfs/boxo/pull/870)
+
+### Fixed
+
+- fix(`provider`): don't reprovide if `reprovideInterval` is set to 0 [#871](https://github.com/ipfs/boxo/pull/871)
+- `gateway`: Skip DNSLink lookup for IP addresses to avoid unnecessary DNS queries [#880](https://github.com/ipfs/boxo/pull/880)
+- `bitswap/client`: Fix unintentional ignoring `DontHaveTimeoutConfig` [#872](https://github.com/ipfs/boxo/pull/872)
+
+
+## [v0.29.0]
+
+### Added
+
+- feat(bitswap/client): MinTimeout for DontHaveTimeoutConfig [#865](https://github.com/ipfs/boxo/pull/865)
+- ✨ `httpnet`: Transparent HTTP-block retrieval support over Trustless Gateways [#747]((https://github.com/ipfs/boxo/pull/747):
+  - Complements Bitswap as a block-retrieval mechanism, implementing `bitswap/network`.
+  - Understands peers found in provider records with `/.../http` endpoints (trustless gateway).
+  - Treats them as "Bitswap" peers, except instead of using Bitswap it makes HTTP/2 requests to discover (`HEAD`) and retrieve (`GET`) individual blocks (`?format=raw`).
+  - A `bitswap/network` proxy implementation allows co-existance with standard `bitswap/network/bsnet`.
+  - `httpnet` is not enabled by default. Upstream implementations may use it by modifying how they create the Bitswap network and initialize bitswap.
+
+### Changed
+
+- `ipns`: The `DefaultRecordTTL` changed from `1h` to `5m` [#859](https://github.com/ipfs/boxo/pull/859)
+- upgrade to `go-libp2p` [v0.41.0](https://github.com/libp2p/go-libp2p/releases/tag/v0.41.0)
+- upgrade to `go-libp2p-kad-dht` [v0.30.2](github.com/libp2p/go-libp2p-kad-dht v0.30.2)
+- upgrade to `go-datastore` [v0.8.2](https://github.com/ipfs/go-datastore/releases/tag/v0.8.2) - includes API updates and removes go-process
+- `bitswap/client` reduce lock scope of PeerManageer to help performance [#860](https://github.com/ipfs/boxo/pull/860)
+- `NewFromIpfsHost()` and the rest of the `BitSwapNetwork` implementation has moved from `github.com/ipfs/boxo/bitswap/network` to `github.com/ipfs/boxo/bitswap/network/bsnet`.
+
+### Removed
+
+- Removed dependency on `github.com/hashicorp/go-multierror` so that boxo only depends on one multi-error package, `go.uber.org/multierr`. [#867](https://github.com/ipfs/boxo/pull/867)
+
+
+## [v0.28.0]
+
+### Added
+
+- `bitswap/client`: Add `DontHaveTimeoutConfig` type alias and `func DontHaveTimeoutConfig()` to expose config defined in internal package.
+### Changed
+
+- move `ipld/unixfs` from gogo protobuf [#841](https://github.com/ipfs/boxo/pull/841)
+- `provider`: Prevent multiple instances of reprovider.Reprovide() from running at the same time. [#834](https://github.com/ipfs/boxo/pull/834)
+- upgrade to `go-libp2p` [v0.40.0](https://github.com/libp2p/go-libp2p/releases/tag/v0.40.0)
+- upgrade to `go-libp2p-kad-dht` [v0.29.0](github.com/libp2p/go-libp2p-kad-dht v0.29.0)
+- move bitswap and filestore away from gogo protobuf [#839](https://github.com/ipfs/boxo/pull/839)
+- updated Go in `go.mod` to 1.23 [#848](https://github.com/ipfs/boxo/pull/848)
+
+**Note: This release contains changes to protocol buffer library code. If you depend on deterministic CIDs then please double-check,, before upgrading, that this release does not generate different CIDs.**
 
 ### Removed
 
@@ -33,6 +154,7 @@ The following emojis are used to highlight certain changes:
 
 - Fix memory leaks due to not cleaning up wantlists [#829](https://github.com/ipfs/boxo/pull/829), [#833](https://github.com/ipfs/boxo/pull/833)
 - `ipns`: Improved interop with legacy clients by restoring support for `[]byte` CID in `Value` field. `Value()` will convert it to a valid `path.Path`. Empty `Value()` will produce `NoopPath` (`/ipfs/bafkqaaa`) to avoid breaking existing code that expects a valid record to always produce a valid content path. [#830](https://github.com/ipfs/boxo/pull/830)
+- `gateway/blocks-backend`: Removed IPLD decoding in GetBlock funciton in gateway's BlocksBackend. Now it's querying the blockService directly instead of dagService. [#845](https://github.com/ipfs/boxo/pull/845)
 
 
 ## [v0.27.3]
@@ -43,12 +165,12 @@ The following emojis are used to highlight certain changes:
 
 ### Removed
 
-- `bitswap/cllient`: Remove unused tracking of CID for interested sessions. [#821](https://github.com/ipfs/boxo/pull/821)
+- `bitswap/client`: Remove unused tracking of CID for interested sessions. [#821](https://github.com/ipfs/boxo/pull/821)
 
 ### Fixed
 
 - `bitswap/client`: Fix runaway goroutine creation under high load. Under high load conditions, goroutines are created faster than they can complete and the more goroutines creates the slower them complete. This creates a positive feedback cycle that ends in OOM. The fix dynamically adjusts message send scheduling to avoid the runaway condition. [#817](https://github.com/ipfs/boxo/pull/817)
-- `bitswap/cllient`: Fix resource leak caused by recording the presence of blocks that no session cares about. [#822](https://github.com/ipfs/boxo/pull/822)
+- `bitswap/client`: Fix resource leak caused by recording the presence of blocks that no session cares about. [#822](https://github.com/ipfs/boxo/pull/822)
 
 
 ## [v0.27.2]

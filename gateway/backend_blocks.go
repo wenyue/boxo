@@ -29,6 +29,7 @@ import (
 	"github.com/ipld/go-car/v2/storage"
 	dagpb "github.com/ipld/go-codec-dagpb"
 	"github.com/ipld/go-ipld-prime"
+
 	// Ensure basic codecs are registered.
 	_ "github.com/ipld/go-ipld-prime/codec/cbor"
 	_ "github.com/ipld/go-ipld-prime/codec/dagcbor"
@@ -140,7 +141,7 @@ func (bb *BlocksBackend) Get(ctx context.Context, path path.ImmutablePath, range
 		}
 
 		if rootCodec == uint64(mc.Raw) {
-			if err := seekToRangeStart(f, ra); err != nil {
+			if err := seekToRangeStart(f, ra, fileSize); err != nil {
 				return ContentPathMetadata{}, nil, err
 			}
 		}
@@ -181,7 +182,7 @@ func (bb *BlocksBackend) Get(ctx context.Context, path path.ImmutablePath, range
 			return ContentPathMetadata{}, nil, err
 		}
 
-		if err := seekToRangeStart(file, ra); err != nil {
+		if err := seekToRangeStart(file, ra, fileSize); err != nil {
 			return ContentPathMetadata{}, nil, err
 		}
 
@@ -210,12 +211,25 @@ func (bb *BlocksBackend) GetAll(ctx context.Context, path path.ImmutablePath) (C
 }
 
 func (bb *BlocksBackend) GetBlock(ctx context.Context, path path.ImmutablePath) (ContentPathMetadata, files.File, error) {
-	md, nd, err := bb.getNode(ctx, path)
+	roots, lastSeg, remainder, err := bb.getPathRoots(ctx, path)
+	if err != nil {
+		return ContentPathMetadata{}, nil, err
+	}
+
+	md := ContentPathMetadata{
+		PathSegmentRoots:     roots,
+		LastSegment:          lastSeg,
+		LastSegmentRemainder: remainder,
+	}
+
+	lastRoot := lastSeg.RootCid()
+
+	b, err := bb.blockService.GetBlock(ctx, lastRoot)
 	if err != nil {
 		return md, nil, err
 	}
 
-	return md, files.NewBytesFile(nd.RawData()), nil
+	return md, files.NewBytesFile(b.RawData()), nil
 }
 
 func (bb *BlocksBackend) Head(ctx context.Context, path path.ImmutablePath) (ContentPathMetadata, *HeadResponse, error) {
