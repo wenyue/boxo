@@ -72,6 +72,10 @@ type DagBuilderParams struct {
 	// NoCopy signals to the chunker that it should track fileinfo for
 	// filestore adds
 	NoCopy bool
+
+	// SmallFileSize is the threshold for small files. When NoCopy is true, the file that has size
+	// larger than SmallFileSize will be stored in the filestore.
+	SmallFileSize int64
 }
 
 // New generates a new DagBuilderHelper from the given params and a given
@@ -86,13 +90,16 @@ func (dbp *DagBuilderParams) New(spl chunker.Splitter) (*DagBuilderHelper, error
 		fileMode:    dbp.FileMode,
 		fileModTime: dbp.FileModTime,
 	}
-	if fi, ok := spl.Reader().(files.FileInfo); dbp.NoCopy && ok {
-		db.fullPath = fi.AbsPath()
-		db.stat = fi.Stat()
-	}
-
-	if dbp.NoCopy && db.fullPath == "" { // Enforce NoCopy
-		return nil, ErrMissingFsRef
+	if dbp.NoCopy {
+		if fi, ok := spl.Reader().(files.FileInfo); ok {
+			stat := fi.Stat()
+			if dbp.SmallFileSize <= 0 || stat.Size() > dbp.SmallFileSize {
+				db.fullPath = fi.AbsPath()
+				db.stat = stat
+			}
+		} else {
+			return nil, ErrMissingFsRef
+		}
 	}
 
 	return db, nil
