@@ -215,7 +215,7 @@ func (f *FileManager) getDataObj(ctx context.Context, m mh.Multihash) (*pb.ExtDa
 
 func unmarshalOrigDataObj(data []byte) (*pb.DataObj, error) {
 	var dobj pb.DataObj
-	if err := gogoproto.Unmarshal(data, &dobj); err != nil {
+	if err := proto.Unmarshal(data, &dobj); err != nil {
 		return nil, err
 	}
 
@@ -384,17 +384,18 @@ func (f *FileManager) putTo(ctx context.Context, b *posinfo.FilestoreNode, to pu
 	bs := uint64(len(b.RawData()))
 	switch err.(type) {
 	case nil:
-		if dobj.Size != bs {
+		if dobj.GetSize() != bs {
 			logger.Errorf("data size mismatch. %d != %d", dobj.Size, bs)
-			dobj = &pb.ExtDataObj{Size: bs}
+			dobj = &pb.ExtDataObj{Size: &bs}
 		}
 	case ipld.ErrNotFound:
-		dobj = &pb.ExtDataObj{Size: bs}
+		dobj = &pb.ExtDataObj{Size: &bs}
 	default:
 		return err
 	}
 
-	fp := pb.FilePos{FilePath: filepath.ToSlash(p), Offset: b.PosInfo.Offset}
+	filePath := filepath.ToSlash(p)
+	fp := pb.FilePos{FilePath: &filePath, Offset: &b.PosInfo.Offset}
 	for _, pos := range dobj.PosList {
 		if pos.GetFilePath() == fp.GetFilePath() && pos.GetOffset() == fp.GetOffset() {
 			return nil
@@ -467,7 +468,7 @@ func (f *FileManager) MigrateToExt(ctx context.Context) error {
 				// Convert to ext data object.
 				extdobj := &pb.ExtDataObj{
 					PosList: []*pb.FilePos{{FilePath: dobj.FilePath, Offset: dobj.Offset}},
-					Size:    dobj.Size_,
+					Size:    dobj.Size,
 				}
 				// Write ext data object.
 				data, err := proto.Marshal(extdobj)
