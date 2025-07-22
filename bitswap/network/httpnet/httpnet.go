@@ -26,20 +26,21 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	"github.com/multiformats/go-multiaddr"
+	"go.uber.org/multierr"
 )
 
 var log = logging.Logger("httpnet")
 
-var ErrNoHTTPAddresses = errors.New("AddrInfo does not contain any valid HTTP addresses")
-var ErrNoSuccess = errors.New("none of the peer HTTP endpoints responded successfully to request")
-var ErrNotConnected = errors.New("no HTTP connection has been setup to this peer")
+var (
+	ErrNoHTTPAddresses = errors.New("AddrInfo does not contain any valid HTTP addresses")
+	ErrNoSuccess       = errors.New("none of the peer HTTP endpoints responded successfully to request")
+	ErrNotConnected    = errors.New("no HTTP connection has been setup to this peer")
+)
 
 var _ network.BitSwapNetwork = (*Network)(nil)
 
-var (
-	// DefaultUserAgent is sent as a header in all requests.
-	DefaultUserAgent = defaultUserAgent() // Usually will result in a "boxo@commitID"
-)
+// DefaultUserAgent is sent as a header in all requests.
+var DefaultUserAgent = defaultUserAgent() // Usually will result in a "boxo@commitID"
 
 // Defaults for the configurable options.
 const (
@@ -119,23 +120,44 @@ func WithInsecureSkipVerify(b bool) Option {
 }
 
 // WithAllowlist sets the hostnames that we are allowed to connect to via
-// HTTP. Additionally, http response status metrics are tagged for each of
-// these hosts.
+// HTTP.
 func WithAllowlist(hosts []string) Option {
 	return func(net *Network) {
 		log.Infof("HTTP retrieval allowlist: %s", strings.Join(hosts, ", "))
 		net.allowlist = make(map[string]struct{})
 		for _, h := range hosts {
+			h = strings.TrimSpace(h)
+			if h == "" {
+				log.Error("empty string in allowlist. Ignoring...")
+				continue
+			}
+			if strings.Contains(h, " ") {
+				log.Errorf("allowlist item '%s' contains a whitespace. Ignoring...")
+				continue
+			}
+
 			net.allowlist[h] = struct{}{}
 		}
 	}
 }
 
+// WithDenylist sets the hostnames that we are prohibited to connect to via
+// HTTP.
 func WithDenylist(hosts []string) Option {
 	return func(net *Network) {
 		log.Infof("HTTP retrieval denylist: %s", strings.Join(hosts, ", "))
 		net.denylist = make(map[string]struct{})
 		for _, h := range hosts {
+			h = strings.TrimSpace(h)
+			if h == "" {
+				log.Error("empty string in denylist. Ignoring...")
+				continue
+			}
+			if strings.Contains(h, " ") {
+				log.Errorf("denylist item '%s' contains a whitespace. Ignoring...")
+				continue
+			}
+
 			net.denylist[h] = struct{}{}
 		}
 	}
@@ -169,6 +191,23 @@ func WithMaxDontHaveErrors(threshold int) Option {
 	}
 }
 
+// WithMetricsLabelsForHosts allows to label some metrics that support it
+// with the endpoint name that they relate to. For example, this allows
+// tracking respose statuses by endpoint. Using '*' means that all endpoints
+// are tracked. By default, no endpoints are tracked. Endpoints that are not
+// tracked are assigned the label "other". In a scenario where we are making
+// requests to many different endpoints, logging all of them with '*' can
+// cause the metric cardinality to grow accordingly, and end up affecting
+// the performance of the metrics collector (i.e. Prometheus).
+func WithMetricsLabelsForEndpoints(hosts []string) Option {
+	return func(net *Network) {
+		net.trackedEndpoints = make(map[string]struct{})
+		for _, h := range hosts {
+			net.trackedEndpoints[h] = struct{}{}
+		}
+	}
+}
+
 type Network struct {
 	// NOTE: Stats must be at the top of the heap allocation to ensure 64bit
 	// alignment.
@@ -199,6 +238,7 @@ type Network struct {
 	httpWorkers             int
 	allowlist               map[string]struct{}
 	denylist                map[string]struct{}
+	trackedEndpoints        map[string]struct{}
 
 	metrics      *metrics
 	httpRequests chan httpRequestInfo
@@ -240,8 +280,7 @@ func New(host host.Host, opts ...Option) network.BitSwapNetwork {
 		opt(htnet)
 	}
 
-	// TODO: take allowlist into account!
-	htnet.metrics = newMetrics(htnet.allowlist)
+	htnet.metrics = newMetrics(htnet.trackedEndpoints)
 
 	reqTracker := newRequestTracker()
 	htnet.requestTracker = reqTracker
@@ -348,12 +387,15 @@ func (ht *Network) Stop() {
 // Ping triggers a ping to the given peer and returns the latency.
 func (ht *Network) Ping(ctx context.Context, p peer.ID) ping.Result {
 	return ht.pinger.ping(ctx, p)
-
 }
 
 // Latency returns the EWMA latency for the given peer.
 func (ht *Network) Latency(p peer.ID) time.Duration {
 	return ht.pinger.latency(p)
+}
+
+func (ht *Network) Host() host.Host {
+	return ht.host
 }
 
 func (ht *Network) senderURLs(p peer.ID) []*senderURL {
@@ -406,10 +448,14 @@ func (ht *Network) Connect(ctx context.Context, pi peer.AddrInfo) error {
 	p := pi.ID
 	connected := ht.pinger.isPinging(p)
 	if connected {
+		ht.connEvtMgr.Connected(p)
+		log.Debugf("reconnected to %s", p)
 		return nil
 	}
 
 	urls := network.ExtractURLsFromPeer(pi)
+
+	errs := []error{ErrNoSuccess}
 
 	// Filter addresses based on allow and denylists
 	var filteredURLs []network.ParsedURL
@@ -426,11 +472,13 @@ func (ht *Network) Connect(ctx context.Context, pi peer.AddrInfo) error {
 		_, denied := ht.denylist[host]
 		if allowed && !denied {
 			filteredURLs = append(filteredURLs, u)
+		} else {
+			errs = append(errs, fmt.Errorf("%s: address not allowed per allow/denylist", u.Multiaddress.String()))
 		}
 	}
 	urls = filteredURLs
 	if len(urls) == 0 {
-		return ErrNoHTTPAddresses
+		return multierr.Combine(errs...)
 	}
 	if len(urls) > ht.maxHTTPAddressesPerPeer {
 		urls = urls[0:ht.maxHTTPAddressesPerPeer]
@@ -446,9 +494,10 @@ func (ht *Network) Connect(ctx context.Context, pi peer.AddrInfo) error {
 		// If head works we assume GET works too.
 		err := ht.connectToURL(ctx, pi.ID, u, "HEAD")
 		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %s", u.Multiaddress.String(), err))
 			// abort if context cancelled
 			if ctxErr := ctx.Err(); ctxErr != nil {
-				return ctxErr
+				return multierr.Combine(errs...)
 			}
 		} else {
 			workingAddrs = append(workingAddrs, u.Multiaddress)
@@ -460,9 +509,9 @@ func (ht *Network) Connect(ctx context.Context, pi peer.AddrInfo) error {
 
 		err = ht.connectToURL(ctx, pi.ID, u, "GET")
 		if err != nil {
-			// abort if context cancelled
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return err
+			errs = append(errs, fmt.Errorf("%s: %s", u.Multiaddress.String(), err))
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return multierr.Combine(errs...)
 			}
 			continue
 		}
@@ -471,7 +520,9 @@ func (ht *Network) Connect(ctx context.Context, pi peer.AddrInfo) error {
 
 	// Bail out if no working urls found.
 	if len(workingAddrs) == 0 {
-		return fmt.Errorf("connect failure to %s: %w", p, ErrNoSuccess)
+		err := multierr.Combine(errs...)
+		log.Debug(err)
+		return err
 	}
 
 	// We have some working urls!
@@ -482,8 +533,9 @@ func (ht *Network) Connect(ctx context.Context, pi peer.AddrInfo) error {
 	// Record whether HEAD test passed for all urls - ignoring error
 	_ = ht.host.Peerstore().Put(pi.ID, peerstoreSupportsHeadKey, supportsHead)
 
-	ht.connEvtMgr.Connected(p)
 	ht.pinger.startPinging(p)
+	ht.connEvtMgr.Connected(p)
+
 	log.Debugf("connect success to %s (supports HEAD: %t)", p, supportsHead)
 	// We "connected"
 	return nil
@@ -514,7 +566,7 @@ func (ht *Network) connectToURL(ctx context.Context, p peer.ID, u network.Parsed
 
 	// probe success.
 	// FIXME: Storacha returns 410 for our probe.
-	if resp.StatusCode == 200 || resp.StatusCode == 204 || resp.StatusCode == 410 {
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusGone {
 		return nil
 	}
 
@@ -651,7 +703,11 @@ func (ht *Network) httpWorker(i int) {
 						continue // retry again ignoring current url
 					case typeContext:
 					case typeFatal:
-						log.Error(err)
+						// noop. Return result. tryURL
+						// never returns
+						// typeFatal. Error logging
+						// happens in the result
+						// collector
 					case typeServer:
 						u.serverErrors.Add(1)
 						continue // retry until bestURL forces abort
@@ -681,7 +737,7 @@ func buildRequest(ctx context.Context, u network.ParsedURL, method string, cid s
 		nil,
 	)
 	if err != nil {
-		log.Error(err)
+		log.Error("error building request:", err)
 		return nil, err
 	}
 
@@ -699,6 +755,8 @@ func buildRequest(ctx context.Context, u network.ParsedURL, method string, cid s
 // given message to the given peer over HTTP.
 // An error is returned of the peer has no known HTTP endpoints.
 func (ht *Network) NewMessageSender(ctx context.Context, p peer.ID, opts *network.MessageSenderOpts) (network.MessageSender, error) {
+	log.Debugf("NewMessageSender: %s", p)
+
 	// cooldowns made by other senders between now and SendMsg will not be
 	// taken into account since we access that info here only. From that
 	// point, we only react to cooldowns/errors received by this message
@@ -719,16 +777,17 @@ func (ht *Network) NewMessageSender(ctx context.Context, p peer.ID, opts *networ
 	// peers that we have connected to and we stop pinging them on
 	// disconnect.
 	if !ht.pinger.isPinging(p) {
+		log.Debug("NewMessageSender: aborting: not connected")
 		return nil, ErrNotConnected
 	}
 
 	// Check that we have HTTP urls.
 	urls := ht.senderURLs(p)
 	if len(urls) == 0 {
+		log.Debug("NewMessageSender: aborting: no HTTPAddresses")
 		return nil, ErrNoHTTPAddresses
 	}
 
-	log.Debugf("NewMessageSender: %s", p)
 	senderOpts := setSenderOpts(opts)
 
 	return &httpMsgSender{

@@ -29,7 +29,6 @@ import (
 	"github.com/ipld/go-car/v2/storage"
 	dagpb "github.com/ipld/go-codec-dagpb"
 	"github.com/ipld/go-ipld-prime"
-
 	// Ensure basic codecs are registered.
 	_ "github.com/ipld/go-ipld-prime/codec/cbor"
 	_ "github.com/ipld/go-ipld-prime/codec/dagcbor"
@@ -504,10 +503,7 @@ func walkGatewaySimpleSelector(ctx context.Context, lastCid cid.Cid, terminalBlk
 				if err != nil {
 					return err
 				}
-				from = fileLength + entityRange.From
-				if from < 0 {
-					from = 0
-				}
+				from = max(fileLength+entityRange.From, 0)
 				foundFileLength = true
 			}
 

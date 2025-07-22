@@ -16,7 +16,62 @@ The following emojis are used to highlight certain changes:
 
 ### Added
 
+- `provider`: Add ability to clear provide queue [#978](https://github.com/ipfs/boxo/pull/978)
+ 
 ### Changed
+
+### Removed
+
+### Fixed
+
+- `bitswap`: fix an issue where boxo silently stops making http retrieval requests. [#981](https://github.com/ipfs/boxo/pull/978), [#980](https://github.com/ipfs/boxo/pull/980), [#979](https://github.com/ipfs/boxo/pull/978)
+
+### Security
+
+
+## [v0.33.0]
+
+### Added
+
+- `bitswap/network/httpnet`: New `WithMetricsLabelsForEndpoints` allows defining which hosts/endpoints can be used for labelling metrics that support such label. '*' enables this for all endpoints receiving HTTP requests, but may cause metric cardinality growth when too many endpoints exist. These labels allow tracking, for example, number or requests per response status AND endpoint used. Non-labelled request hosts are labelled with same value: `other`.
+
+### Changed
+
+- `DontHaveTimeoutConfig`'s default `MinTimeout` is changed from `0` to `50ms` [#959](https://github.com/ipfs/boxo/pull/959) [#965](https://github.com/ipfs/boxo/pull/965).
+- upgrade to `go-libp2p` [v0.42.0](https://github.com/libp2p/go-libp2p/releases/tag/v0.42.0)
+
+### Removed
+
+### Fixed
+- `bitswap/client`: Fix sending extra wants [#968](https://github.com/ipfs/boxo/pull/968) + [#975](https://github.com/ipfs/boxo/pull/975)
+- `routing/http/client`: Improve URL handling for delegated routing endpoints [#971](https://github.com/ipfs/boxo/pull/971)
+
+### Security
+
+- fix panic when incoming Bitswap protobuf message does not contain `Wantlist` [#961](https://github.com/ipfs/boxo/pull/961)
+
+
+## [v0.32.0]
+
+### Added
+
+- `provider` includes metrics on the number of keys provided so far(`reprovider_provide_count`) and the number of keys reprovided so far (`reprovider_reprovide_count`) [#944](https://github.com/ipfs/boxo/pull/944)
+- `bitswap/client`: New metrics:
+  - `ipfs_bitswap_wanthaves_broadcast`: Count of want-haves broadcasts
+  - `ipfs_bitswap_haves_received`:  Count of total have responses
+  - `ipfs_bitswap_bcast_skips_total{`: Count of broadcasts skipped as part of spam reduction logic (see "Changed" below)
+  - `ipfs_bitswap_unique_blocks_received`: Count of non-duplicate blocks recieved
+
+### Changed
+
+- `provider`: previously, the code in this module was logging to `reprovider.simple`, `provider.batched` and `provider.queue` facilities. They have now been consolidated in a single `provider` logging facility, along with some adjustments to logging levels and extra debug statements.
+- `bitswap/client`: Added an opt-in ability to reduce bitswap broadcast volume by limiting broadcasts to peers that have previously responded as having wanted blocks and peers on local network. The following bitswap client options are available to configure the behavior of broadcast reduction:
+  - `BroadcastControlEnable` enables or disables broadcast reduction logic. Setting this to `false` restores the previous broadcast behavior of sending broadcasts to all peers, and ignores all other `BroadcastControl` options. Default is `false` (disabled).
+  - `BroadcastControlMaxPeers` sets a hard limit on the number of peers to send broadcasts to. A value of `0` means no broadcasts are sent. A value of `-1` means there is no limit. Default is `-1` (unlimited).
+  - `BroadcastControlLocalPeers` enables or disables broadcast control for peers on the local network. If `false`, then always broadcast to peers on the local network. If `true`, apply broadcast control to local peers. Default is `false` (always broadcast to local peers).
+  - `BroadcastControlPeeredPeers` enables or disables broadcast control for peers configured for peering. If `false`, then always broadcast to peers configured for peering. If `true`, apply broadcast control to peered peers. Default is `false` (always broadcast to peered peers).
+  - `BroadcastControlMaxRandomPeers` sets the number of peers to broadcast to anyway, even though broadcast control logic has determined that they are not broadcast targets. Setting this to a non-zero value ensures at least this number of random peers receives a broadcast. This may be helpful in cases where peers that are not receiving broadcasts may have wanted blocks. Default is `0` (no random broadcasts).
+  - `BroadcastControlSendToPendingPeers` enables or disables sending broadcasts to any peers to which there is a pending message to send. When `true` (enabled), this sends broadcasts to many more peers, but does so in a way that does not increase the number of separate broadcast messages. There is still the increased cost of the recipients having to process and respond to the broadcasts. Default is `false`.
 
 ### Removed
 
@@ -25,8 +80,6 @@ The following emojis are used to highlight certain changes:
 ### Fixed
 
 - `gateway`: Fixed suffix range-requests and updated tests to [gateway-conformance v0.8](https://github.com/ipfs/gateway-conformance/releases/tag/v0.8.0) [#922](https://github.com/ipfs/boxo/pull/922)
-
-### Security
 
 
 ## [v0.31.0]
