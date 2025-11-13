@@ -107,7 +107,7 @@ func New(bs blockstore.Blockstore, exchange exchange.Interface, opts ...Option) 
 		allowlist:  verifcid.DefaultAllowlist,
 		blockstore: bs,
 		exchange:   exchange,
-		checkFirst: true,
+		checkFirst: false,
 	}
 
 	for _, opt := range opts {

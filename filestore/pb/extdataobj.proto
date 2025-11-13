@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package ipfs.boxo.filestore.pb;
+
+option go_package = "github.com/ipfs/boxo/filestore/pb";
+
+message FilePos {
+  optional string FilePath = 1;
+  optional uint64 Offset = 2;
+}
+
+message ExtDataObj {
+  repeated FilePos PosList = 1;
+  optional uint64 Size = 2;
+}

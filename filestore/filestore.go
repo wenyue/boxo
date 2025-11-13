@@ -188,19 +188,12 @@ func (f *Filestore) Has(ctx context.Context, c cid.Cid) (bool, error) {
 // delegated to the FileManager, while the rest of blocks
 // are handled by the regular blockstore.
 func (f *Filestore) Put(ctx context.Context, b blocks.Block) error {
-	has, err := f.Has(ctx, b.Cid())
-	if err != nil {
-		return err
-	}
-
-	if has {
-		return nil
-	}
-
 	switch b := b.(type) {
 	case *posinfo.FilestoreNode:
-		err = f.fm.Put(ctx, b)
-		if err != nil {
+		if err := f.fm.Put(ctx, b); err != nil {
+			return err
+		}
+		if err := f.bs.DeleteBlock(ctx, b.Cid()); err != nil && !ipld.IsNotFound(err) {
 			return err
 		}
 		if f.provider != nil {
@@ -211,7 +204,11 @@ func (f *Filestore) Put(ctx context.Context, b blocks.Block) error {
 		}
 		return nil
 	default:
-		return f.bs.Put(ctx, b)
+		// The file may have been deleted, so we use Get() instead of Has() to check if it exists.
+		if _, err := f.fm.Get(ctx, b.Cid()); err != nil {
+			return f.bs.Put(ctx, b)
+		}
+		return nil
 	}
 }
 
@@ -222,34 +219,31 @@ func (f *Filestore) PutMany(ctx context.Context, bs []blocks.Block) error {
 	var fstores []*posinfo.FilestoreNode
 
 	for _, b := range bs {
-		has, err := f.Has(ctx, b.Cid())
-		if err != nil {
-			return err
-		}
-
-		if has {
-			continue
-		}
-
 		switch b := b.(type) {
 		case *posinfo.FilestoreNode:
 			fstores = append(fstores, b)
 		default:
-			normals = append(normals, b)
+			// The file may have been deleted, so we use Get() instead of Has() to check if it exists.
+			if _, err := f.fm.Get(ctx, b.Cid()); err != nil {
+				normals = append(normals, b)
+			}
 		}
 	}
 
 	if len(normals) > 0 {
-		err := f.bs.PutMany(ctx, normals)
-		if err != nil {
+		if err := f.bs.PutMany(ctx, normals); err != nil {
 			return err
 		}
 	}
 
 	if len(fstores) > 0 {
-		err := f.fm.PutMany(ctx, fstores)
-		if err != nil {
+		if err := f.fm.PutMany(ctx, fstores); err != nil {
 			return err
+		}
+		for _, b := range fstores {
+			if err := f.bs.DeleteBlock(ctx, b.Cid()); err != nil && !ipld.IsNotFound(err) {
+				return err
+			}
 		}
 
 		if f.provider != nil {
