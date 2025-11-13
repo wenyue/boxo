@@ -16,7 +16,6 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	peer "github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
-	"go.uber.org/zap/zapcore"
 )
 
 var log = logging.Logger("bitswap/client/msgq")
@@ -562,7 +561,7 @@ func (mq *MessageQueue) sendMessage() {
 		// If we fail to initialize the sender, the networking layer will
 		// emit a Disconnect event and the MessageQueue will get cleaned up
 		log.Infof("Could not open message sender to peer %s: %s", mq.p, err)
-		mq.Shutdown()
+		// do not shudown the queue here, wait for Disconnect to arrive.
 		return
 	}
 
@@ -593,7 +592,7 @@ func (mq *MessageQueue) sendMessage() {
 			// If the message couldn't be sent, the networking layer will
 			// emit a Disconnect event and the MessageQueue will get cleaned up
 			log.Infof("Could not send message to peer %s: %s", mq.p, err)
-			mq.Shutdown()
+			// do not shudown the queue here, wait for Disconnect to arrive.
 			return
 		}
 
@@ -698,7 +697,7 @@ func (mq *MessageQueue) handleResponse(ks []cid.Cid) {
 
 func (mq *MessageQueue) logOutgoingMessage(wantlist []bsmsg.Entry) {
 	// Save some CPU cycles and allocations if log level is higher than debug
-	if !log.Level().Enabled(zapcore.DebugLevel) {
+	if !log.LevelEnabled(logging.LevelDebug) {
 		return
 	}
 

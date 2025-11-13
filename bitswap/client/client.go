@@ -27,14 +27,12 @@ import (
 	rpqm "github.com/ipfs/boxo/routing/providerquerymanager"
 	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
-	delay "github.com/ipfs/go-ipfs-delay"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/ipfs/go-metrics-interface"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap/zapcore"
 )
 
 var log = logging.Logger("bitswap/client")
@@ -64,7 +62,7 @@ func ProviderSearchDelay(newProvSearchDelay time.Duration) Option {
 // When the value ellapses, a random CID from the wantlist is chosen and the
 // client attempts to find more peers for it and sends them the single want.
 // [defaults.RebroadcastDelay] for the default.
-func RebroadcastDelay(newRebroadcastDelay delay.D) Option {
+func RebroadcastDelay(newRebroadcastDelay time.Duration) Option {
 	return func(bs *Client) {
 		bs.rebroadcastDelay = newRebroadcastDelay
 	}
@@ -97,6 +95,16 @@ func WithPerPeerSendDelay(delay time.Duration) Option {
 func WithTracer(tap tracer.Tracer) Option {
 	return func(bs *Client) {
 		bs.tracer = tap
+	}
+}
+
+// WithTraceBlock, if enabled is true, configures the client's GetBLock and
+// GetBlocks functions to returns a
+// [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable
+// [blocks.Block].
+func WithTraceBlock(enable bool) Option {
+	return func(bs *Client) {
+		bs.traceBlock = enable
 	}
 }
 
@@ -231,7 +239,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, providerFinder ro
 		havesReceivedGauge:          bmetrics.HavesReceivedGauge(ctx),
 		blocksReceivedGauge:         bmetrics.BlocksReceivedGauge(ctx),
 		provSearchDelay:             defaults.ProvSearchDelay,
-		rebroadcastDelay:            delay.Fixed(defaults.RebroadcastDelay),
+		rebroadcastDelay:            defaults.RebroadcastDelay,
 		simulateDontHavesOnTimeout:  true,
 		defaultProviderQueryManager: true,
 
@@ -299,7 +307,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, providerFinder ro
 		bpm *bsbpm.BlockPresenceManager,
 		notif notifications.PubSub,
 		provSearchDelay time.Duration,
-		rebroadcastDelay delay.D,
+		rebroadcastDelay time.Duration,
 		self peer.ID,
 	) bssm.Session {
 		// careful when bs.pqm is nil. Since we are type-casting it
@@ -314,11 +322,11 @@ func New(parent context.Context, network bsnet.BitSwapNetwork, providerFinder ro
 		}
 		return bssession.New(sessctx, sessmgr, id, spm, sessionProvFinder, sim, pm, bpm, notif, provSearchDelay, rebroadcastDelay, self, bs.havesReceivedGauge)
 	}
-	sessionPeerManagerFactory := func(ctx context.Context, id uint64) bssession.SessionPeerManager {
+	sessionPeerManagerFactory := func(id uint64) bssession.SessionPeerManager {
 		return bsspm.New(id, network)
 	}
-	notif := notifications.New()
-	sm = bssm.New(ctx, sessionFactory, sim, sessionPeerManagerFactory, bpm, pm, notif, network.Self())
+	notif := notifications.New(bs.traceBlock)
+	sm = bssm.New(sessionFactory, sim, sessionPeerManagerFactory, bpm, pm, notif, network.Self())
 
 	bs.sm = sm
 	bs.notif = notif
@@ -366,6 +374,11 @@ type Client struct {
 	// External statistics interface
 	tracer tracer.Tracer
 
+	// Enable GetBLock to return
+	// [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable
+	// [blocks.Block].
+	traceBlock bool
+
 	// the SessionManager routes requests to interested sessions
 	sm *bssm.SessionManager
 
@@ -377,7 +390,7 @@ type Client struct {
 	provSearchDelay time.Duration
 
 	// how often to rebroadcast providing requests to find more optimized providers
-	rebroadcastDelay delay.D
+	rebroadcastDelay time.Duration
 
 	blockReceivedNotifier BlockReceivedNotifier
 
@@ -404,7 +417,10 @@ type counters struct {
 
 // GetBlock attempts to retrieve a particular block from peers within the
 // deadline enforced by the context.
-// It returns a [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable [blocks.Block].
+//
+// If [WithTraceBlock] option is set true, then returns a
+// [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable
+// [blocks.Block].
 func (bs *Client) GetBlock(ctx context.Context, k cid.Cid) (blocks.Block, error) {
 	ctx, span := internal.StartSpan(ctx, "GetBlock", trace.WithAttributes(attribute.String("Key", k.String())))
 	defer span.End()
@@ -414,16 +430,63 @@ func (bs *Client) GetBlock(ctx context.Context, k cid.Cid) (blocks.Block, error)
 // GetBlocks returns a channel where the caller may receive blocks that
 // correspond to the provided |keys|. Returns an error if BitSwap is unable to
 // begin this request within the deadline enforced by the context.
-// It returns a [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable [blocks.Block].
 //
-// NB: Your request remains open until the context expires. To conserve
-// resources, provide a context with a reasonably short deadline (ie. not one
-// that lasts throughout the lifetime of the server)
+// If [WithTraceBlock] option is set true, then returns a channel of
+// [github.com/ipfs/boxo/bitswap/client/traceability.Block] assertable
+// [blocks.Block].
+//
+// When the provided context is canceled, GetBlocks will stop returning blocks
+// and the returned channel will be closed.
+//
+// This method creates a temporary internal session that is automatically cleaned up
+// when the operation completes. Any retrieval.State attached to the context will be
+// preserved and used for diagnostic tracking throughout the retrieval process.
 func (bs *Client) GetBlocks(ctx context.Context, keys []cid.Cid) (<-chan blocks.Block, error) {
 	ctx, span := internal.StartSpan(ctx, "GetBlocks", trace.WithAttributes(attribute.Int("NumKeys", len(keys))))
 	defer span.End()
-	session := bs.sm.NewSession(ctx, bs.provSearchDelay, bs.rebroadcastDelay)
-	return session.GetBlocks(ctx, keys)
+
+	// Create a session context for the goroutine created here to use to close
+	// the session after reading all blocks.
+	sessCtx, cancelSession := context.WithCancel(ctx)
+
+	session := bs.sm.NewSession(sessCtx, bs.provSearchDelay, bs.rebroadcastDelay)
+
+	blocksChan, err := session.GetBlocks(ctx, keys)
+	if err != nil {
+		cancelSession()
+		return nil, err
+	}
+
+	// The purpose of creating this goroutine to read the blocks from one
+	// channel and then put them on another channel, instead of simply
+	// returning the first channel, is to ensure that the session created here
+	// is closed after reading the blocks.
+	out := make(chan blocks.Block)
+	go func() {
+		defer func() {
+			close(out)
+			cancelSession()
+		}()
+
+		ctxDone := ctx.Done()
+		for {
+			select {
+			case blk, ok := <-blocksChan:
+				if !ok {
+					return
+				}
+				select {
+				case out <- blk:
+				case <-ctxDone:
+					return
+				}
+			case <-ctxDone:
+				return
+			}
+		}
+	}()
+
+	return out, nil
 }
 
 // NotifyNewBlocks announces the existence of blocks to this bitswap service.
@@ -470,7 +533,7 @@ func (bs *Client) receiveBlocksFrom(ctx context.Context, from peer.ID, blks []bl
 	}
 
 	wanted, notWanted := bs.sim.SplitWantedUnwanted(blks)
-	if log.Level().Enabled(zapcore.DebugLevel) {
+	if log.LevelEnabled(logging.LevelDebug) {
 		for _, b := range notWanted {
 			log.Debugf("[recv] block not in wantlist; cid=%s, peer=%s", b.Cid(), from)
 		}
@@ -516,7 +579,7 @@ func (bs *Client) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg.
 
 	if len(iblocks) > 0 {
 		bs.updateReceiveCounters(iblocks)
-		if log.Level().Enabled(zapcore.DebugLevel) {
+		if log.LevelEnabled(logging.LevelDebug) {
 			for _, b := range iblocks {
 				log.Debugf("[recv] block; cid=%s, peer=%s", b.Cid(), p)
 			}
@@ -649,8 +712,17 @@ func (bs *Client) IsOnline() bool {
 // method, but the session will use the fact that the requests are related to
 // be more efficient in its requests to peers. If you are using a session
 // from blockservice, it will create a bitswap session automatically.
+//
+// The context is used for:
+//   - Automatic session cleanup: when the context is canceled, the session will be closed
+//   - Retrieval state tracking: any retrieval.State attached to the context will be
+//     preserved in the session for diagnostic tracking of provider discovery and data retrieval
+//
+// The session's lifetime is controlled by the context and requires that the
+// context be canceled for the session to be closed.
 func (bs *Client) NewSession(ctx context.Context) exchange.Fetcher {
 	ctx, span := internal.StartSpan(ctx, "NewSession")
 	defer span.End()
+
 	return bs.sm.NewSession(ctx, bs.provSearchDelay, bs.rebroadcastDelay)
 }

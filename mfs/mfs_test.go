@@ -31,6 +31,7 @@ import (
 	dssync "github.com/ipfs/go-datastore/sync"
 	ipld "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-test/random"
+	"github.com/multiformats/go-multihash"
 )
 
 func emptyDirNode() *dag.ProtoNode {
@@ -203,16 +204,26 @@ func catNode(ds ipld.DAGService, nd *dag.ProtoNode) ([]byte, error) {
 	return io.ReadAll(r)
 }
 
+type fakeProvider struct{}
+
+func (p *fakeProvider) StartProviding(force bool, keys ...multihash.Multihash) error {
+	for _, k := range keys {
+		fmt.Println("PROVIDED: ", k)
+	}
+	return nil
+}
+
 func setupRoot(ctx context.Context, t testing.TB) (ipld.DAGService, *Root) {
 	t.Helper()
 
 	ds := getDagserv(t)
 
 	root := emptyDirNode()
+	prov := new(fakeProvider)
 	rt, err := NewRoot(ctx, ds, root, func(ctx context.Context, c cid.Cid) error {
 		fmt.Println("PUBLISHED: ", c)
 		return nil
-	})
+	}, prov)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -953,7 +964,8 @@ func actorMakeFile(d *Directory) error {
 	}
 
 	name := randomName()
-	f, err := NewFile(name, dag.NodeWithData(ft.FilePBData(nil, 0)), d, d.dagService)
+	prov := new(fakeProvider)
+	f, err := NewFile(name, dag.NodeWithData(ft.FilePBData(nil, 0)), d, d.dagService, prov)
 	if err != nil {
 		return err
 	}
@@ -1471,7 +1483,8 @@ func TestFileDescriptors(t *testing.T) {
 	dir := rt.GetDirectory()
 
 	nd := dag.NodeWithData(ft.FilePBData(nil, 0))
-	fi, err := NewFile("test", nd, dir, ds)
+	prov := new(fakeProvider)
+	fi, err := NewFile("test", nd, dir, ds, prov)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1577,7 +1590,8 @@ func TestTruncateAtSize(t *testing.T) {
 	dir := rt.GetDirectory()
 
 	nd := dag.NodeWithData(ft.FilePBData(nil, 0))
-	fi, err := NewFile("test", nd, dir, ds)
+	prov := new(fakeProvider)
+	fi, err := NewFile("test", nd, dir, ds, prov)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1602,7 +1616,8 @@ func TestTruncateAndWrite(t *testing.T) {
 	dir := rt.GetDirectory()
 
 	nd := dag.NodeWithData(ft.FilePBData(nil, 0))
-	fi, err := NewFile("test", nd, dir, ds)
+	prov := new(fakeProvider)
+	fi, err := NewFile("test", nd, dir, ds, prov)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1647,7 +1662,8 @@ func TestFSNodeType(t *testing.T) {
 
 	// check for IsDir
 	nd := dag.NodeWithData(ft.FolderPBData())
-	di, err := NewDirectory(ctx, "test", nd, rt.GetDirectory(), ds)
+	prov := new(fakeProvider)
+	di, err := NewDirectory(ctx, "test", nd, rt.GetDirectory(), ds, prov)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1658,7 +1674,7 @@ func TestFSNodeType(t *testing.T) {
 
 	// check for IsFile
 	fnd := dag.NodeWithData(ft.FilePBData(nil, 0))
-	fi, err := NewFile("test", fnd, rt.GetDirectory(), ds)
+	fi, err := NewFile("test", fnd, rt.GetDirectory(), ds, prov)
 	if err != nil {
 		t.Fatal(err)
 	}
