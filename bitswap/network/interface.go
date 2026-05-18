@@ -38,6 +38,13 @@ type BitSwapNetwork interface {
 	Self() peer.ID
 	Pinger
 	PeerTagger
+
+	// SetUploadLimit sets the upload rate limit in bytes/sec.
+	// A value <= 0 disables rate limiting (sets to unlimited).
+	SetUploadLimit(bytesPerSec int64)
+	// SetDownloadLimit sets the download rate limit in bytes/sec.
+	// A value <= 0 disables rate limiting (sets to unlimited).
+	SetDownloadLimit(bytesPerSec int64)
 }
 
 // PeerTagger is an interface for tagging peers with metadata

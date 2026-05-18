@@ -366,6 +366,9 @@ func (bsnet *networkClient) Unprotect(p peer.ID, tag string) bool {
 	return false
 }
 
+func (nc *networkClient) SetUploadLimit(bytesPerSec int64)   {}
+func (nc *networkClient) SetDownloadLimit(bytesPerSec int64) {}
+
 func (rq *receiverQueue) enqueue(m *message) {
 	rq.lk.Lock()
 	defer rq.lk.Unlock()

@@ -235,3 +235,15 @@ func (rt *router) Unprotect(p peer.ID, tag string) bool {
 	}
 	return rt.Bitswap.Unprotect(p, tag)
 }
+
+func (rt *router) SetUploadLimit(bytesPerSec int64) {
+	if rt.Bitswap != nil {
+		rt.Bitswap.SetUploadLimit(bytesPerSec)
+	}
+}
+
+func (rt *router) SetDownloadLimit(bytesPerSec int64) {
+	if rt.Bitswap != nil {
+		rt.Bitswap.SetDownloadLimit(bytesPerSec)
+	}
+}

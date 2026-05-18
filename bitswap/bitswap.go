@@ -197,3 +197,15 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming messa
 		bs.Server.ReceiveMessage(ctx, p, incoming)
 	}
 }
+
+// SetUploadLimit sets the Bitswap upload rate limit in bytes per second.
+// A value <= 0 disables rate limiting.
+func (bs *Bitswap) SetUploadLimit(bytesPerSec int64) {
+	bs.net.SetUploadLimit(bytesPerSec)
+}
+
+// SetDownloadLimit sets the Bitswap download rate limit in bytes per second.
+// A value <= 0 disables rate limiting.
+func (bs *Bitswap) SetDownloadLimit(bytesPerSec int64) {
+	bs.net.SetDownloadLimit(bytesPerSec)
+}

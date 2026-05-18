@@ -898,3 +898,6 @@ func defaultUserAgent() (ua string) {
 	}
 	return
 }
+
+func (n *Network) SetUploadLimit(bytesPerSec int64)   {}
+func (n *Network) SetDownloadLimit(bytesPerSec int64) {}

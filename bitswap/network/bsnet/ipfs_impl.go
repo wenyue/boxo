@@ -20,6 +20,7 @@ import (
 	"github.com/libp2p/go-msgio"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/multiformats/go-multistream"
+	"golang.org/x/time/rate"
 )
 
 var log = logging.Logger("bitswap/bsnet")
@@ -47,6 +48,9 @@ func NewFromIpfsHost(host host.Host, opts ...NetOpt) iface.BitSwapNetwork {
 		connectEvtMgr:      s.connEvtMgr,
 
 		metrics: newMetrics(),
+
+		uploadLimiter:   newRateLimiter(s.UploadBytesPerSec),
+		downloadLimiter: newRateLimiter(s.DownloadBytesPerSec),
 	}
 
 	return &bitswapNetwork
@@ -84,6 +88,9 @@ type impl struct {
 	receivers []iface.Receiver
 
 	metrics *metrics
+
+	uploadLimiter   *rate.Limiter
+	downloadLimiter *rate.Limiter
 }
 
 // interfaceWrapper is concrete type that wraps an interface. Necessary because
@@ -290,10 +297,24 @@ func (bsnet *impl) SupportsHave(proto protocol.ID) bool {
 }
 
 func (bsnet *impl) msgToStream(ctx context.Context, s network.Stream, msg bsmsg.BitSwapMessage, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
-		deadline = dl
+	now := time.Now()
+	if dl, ok := ctx.Deadline(); ok {
+		if ctxTimeout := dl.Sub(now); ctxTimeout < timeout {
+			timeout = ctxTimeout
+		}
 	}
+
+	// Extend timeout when upload rate limiting is active and message has blocks
+	if bsnet.uploadLimiter != nil && len(msg.Blocks()) > 0 {
+		limit := bsnet.uploadLimiter.Limit()
+		if limit != rate.Inf && limit > 0 {
+			limitTimeout := time.Duration(float64(msg.Size()) / float64(limit) * 1.5)
+			if limitTimeout > timeout {
+				timeout = limitTimeout
+			}
+		}
+	}
+	deadline := now.Add(timeout)
 
 	if err := s.SetWriteDeadline(deadline); err != nil {
 		log.Warnf("error setting deadline: %s", err)
@@ -302,17 +323,22 @@ func (bsnet *impl) msgToStream(ctx context.Context, s network.Stream, msg bsmsg.
 	bsnet.metrics.RequestsInFlight.Inc()
 	defer bsnet.metrics.RequestsInFlight.Dec()
 
-	// Older Bitswap versions use a slightly different wire format so we need
-	// to convert the message to the appropriate format depending on the remote
-	// peer's Bitswap version.
+	// Determine writer: apply throttle only for messages containing blocks
+	var w io.Writer = s
+	if bsnet.uploadLimiter != nil && len(msg.Blocks()) > 0 {
+		if bsnet.uploadLimiter.Limit() != rate.Inf {
+			w = newThrottledWriter(ctx, s, bsnet.uploadLimiter)
+		}
+	}
+
 	switch s.Protocol() {
 	case bsnet.protocolBitswapOneOne, bsnet.protocolBitswap:
-		if err := msg.ToNetV1(s); err != nil {
+		if err := msg.ToNetV1(w); err != nil {
 			log.Debugf("error: %s", err)
 			return err
 		}
 	case bsnet.protocolBitswapOneZero, bsnet.protocolBitswapNoVers:
-		if err := msg.ToNetV0(s); err != nil {
+		if err := msg.ToNetV0(w); err != nil {
 			log.Debugf("error: %s", err)
 			return err
 		}
@@ -441,9 +467,6 @@ func (bsnet *impl) IsConnectedToPeer(ctx context.Context, p peer.ID) bool {
 func (bsnet *impl) handleNewStream(s network.Stream) {
 	defer s.Close()
 
-	// In HTTPnet this metric measures sending the request and reading the
-	// response.
-	// In bitswap these are de-coupled, but we can measure them separately.
 	bsnet.metrics.RequestsInFlight.Inc()
 	defer bsnet.metrics.RequestsInFlight.Dec()
 
@@ -452,7 +475,13 @@ func (bsnet *impl) handleNewStream(s network.Stream) {
 		return
 	}
 
-	reader := msgio.NewVarintReaderSize(s, network.MessageSizeMax)
+	// Apply download rate limiting
+	var r io.Reader = s
+	if bsnet.downloadLimiter != nil && bsnet.downloadLimiter.Limit() != rate.Inf {
+		r = newThrottledReader(context.Background(), s, bsnet.downloadLimiter)
+	}
+
+	reader := msgio.NewVarintReaderSize(r, network.MessageSizeMax)
 	for {
 		received, size, err := bsmsg.FromMsgReader(reader)
 		if err != nil {
@@ -511,6 +540,20 @@ func (bsnet *impl) Stats() iface.Stats {
 		MessagesRecvd: atomic.LoadUint64(&bsnet.stats.MessagesRecvd),
 		MessagesSent:  atomic.LoadUint64(&bsnet.stats.MessagesSent),
 	}
+}
+
+func (bsnet *impl) SetUploadLimit(bytesPerSec int64) {
+	if bsnet.uploadLimiter == nil {
+		return
+	}
+	applyRateLimit(bsnet.uploadLimiter, bytesPerSec)
+}
+
+func (bsnet *impl) SetDownloadLimit(bytesPerSec int64) {
+	if bsnet.downloadLimiter == nil {
+		return
+	}
+	applyRateLimit(bsnet.downloadLimiter, bytesPerSec)
 }
 
 type netNotifiee impl
