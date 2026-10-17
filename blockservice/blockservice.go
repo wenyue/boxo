@@ -5,6 +5,7 @@ package blockservice
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 
@@ -149,6 +150,11 @@ func NewSession(ctx context.Context, bs BlockService) *Session {
 // newSession is like [NewSession] but it does not attempt to reuse session from the existing context.
 func newSession(ctx context.Context, bs BlockService) *Session {
 	return &Session{bs: bs, sesctx: ctx}
+}
+
+// NewOwnedSession never reuses a context session; its caller owns CloseAndWait.
+func NewOwnedSession(ctx context.Context, bs BlockService) *Session {
+	return newSession(ctx, bs)
 }
 
 // AddBlock adds a particular block to the service, Putting it into the datastore.
@@ -428,6 +434,7 @@ type Session struct {
 	bs            BlockService
 	ses           exchange.Fetcher
 	sesctx        context.Context
+	owned         bool
 }
 
 // grabSession is used to lazily create sessions.
@@ -448,9 +455,25 @@ func (s *Session) grabSession() exchange.Fetcher {
 			return
 		}
 		s.ses = sesEx.NewSession(s.sesctx)
+		s.owned = true
 	})
 
 	return s.ses
+}
+
+// CloseAndWait joins the owned exchange session after callers have stopped fetching.
+// A shared fallback exchange is never closed on behalf of a single operation.
+func (s *Session) CloseAndWait() error {
+	s.createSession.Do(func() { s.sesctx = nil })
+	if !s.owned {
+		return nil
+	}
+	joiner, ok := s.ses.(interface{ CloseAndWait() })
+	if !ok {
+		return errors.New("exchange session does not support completion waiting")
+	}
+	joiner.CloseAndWait()
+	return nil
 }
 
 // GetBlock gets a block in the context of a request session

@@ -277,6 +277,22 @@ func (d *Directory) childUnsync(name string) (FSNode, error) {
 	return d.cacheNode(name, nd)
 }
 
+// Link presence does not depend on successfully loading the linked node.
+// The caller holds d.lock across this check and any subsequent insertion.
+func (d *Directory) hasChildUnsync(name string) (bool, error) {
+	if _, cached := d.entriesCache[name]; cached {
+		return true, nil
+	}
+	present := false
+	err := d.unixfsDir.ForEachLink(d.ctx, func(link *ipld.Link) error {
+		if link.Name == name {
+			present = true
+		}
+		return nil
+	})
+	return present, err
+}
+
 type NodeListing struct {
 	Name string
 	Type int
@@ -363,6 +379,13 @@ func (d *Directory) MkdirWithOpts(name string, opts MkdirOpts) (*Directory, erro
 			return nil, fmt.Errorf("unrecognized type: %#v", fsn)
 		}
 	}
+	present, lookupErr := d.hasChildUnsync(name)
+	if lookupErr != nil {
+		return nil, lookupErr
+	}
+	if present {
+		return nil, err
+	}
 
 	// hector: no idea why this option is overridden, but it must be to
 	// keep backwards compatibility. CidBuilder from the options is
@@ -413,6 +436,13 @@ func (d *Directory) AddChild(name string, nd ipld.Node) error {
 	_, err := d.childUnsync(name)
 	if err == nil {
 		return ErrDirExists
+	}
+	present, lookupErr := d.hasChildUnsync(name)
+	if lookupErr != nil {
+		return lookupErr
+	}
+	if present {
+		return err
 	}
 
 	err = d.dagService.Add(d.ctx, nd)

@@ -91,13 +91,19 @@ func (sm *SessionManager) NewSession(ctx context.Context, provSearchDelay, rebro
 	defer span.End()
 
 	pm := sm.peerManagerFactory(id)
+	// A cancelled session can finish during construction. Keep registration
+	// ordered before RemoveSession so a completed session cannot be reinserted.
+	sm.sessLk.Lock()
 	session := sm.sessionFactory(ctx, sm, id, pm, sm.sessionInterestManager, sm.peerManager, sm.blockPresenceManager, sm.notif, provSearchDelay, rebroadcastDelay, sm.self)
 
-	sm.sessLk.Lock()
-	if sm.sessions != nil { // check if SessionManager was shutdown
+	shutdown := sm.sessions == nil
+	if !shutdown {
 		sm.sessions[id] = session
 	}
 	sm.sessLk.Unlock()
+	if shutdown {
+		session.Close()
+	}
 
 	return session
 }

@@ -39,12 +39,18 @@ func SyncGetBlock(p context.Context, k cid.Cid, gb GetBlocksFunc) (blocks.Block,
 	// when this context's cancel func is executed. This is difficult to
 	// enforce. May this comment keep you safe.
 	ctx, cancel := context.WithCancel(p)
-	defer cancel()
 
 	promise, err := gb(ctx, []cid.Cid{k})
 	if err != nil {
+		cancel()
 		return nil, err
 	}
+	defer func() {
+		cancel()
+		// Channel closure follows request cleanup, including notification unsubscription.
+		for range promise {
+		}
+	}()
 
 	select {
 	case block, ok := <-promise:
@@ -68,7 +74,7 @@ type WantFunc func(context.Context, []cid.Cid)
 // AsyncGetBlocks take a set of block cids, a pubsub channel for incoming
 // blocks, a want function, and a close function, and returns a channel of
 // incoming blocks.
-func AsyncGetBlocks(ctx, sessctx context.Context, keys []cid.Cid, notif notifications.PubSub, want WantFunc, cwants func([]cid.Cid)) (<-chan blocks.Block, error) {
+func AsyncGetBlocks(ctx, sessctx context.Context, keys []cid.Cid, notif notifications.PubSub, want WantFunc, cwants func([]cid.Cid), finished ...func()) (<-chan blocks.Block, error) {
 	ctx, span := internal.StartSpan(ctx, "Getter.AsyncGetBlocks")
 	defer span.End()
 
@@ -76,11 +82,15 @@ func AsyncGetBlocks(ctx, sessctx context.Context, keys []cid.Cid, notif notifica
 
 	// If there are no keys supplied, just return a closed channel
 	if len(keys) == 0 {
+		for _, done := range finished {
+			done()
+		}
 		close(out)
 		return out, nil
 	}
 
 	// Use a PubSub notifier to listen for incoming blocks for each key
+	ctx, cancel := context.WithCancel(ctx)
 	remaining := cid.NewSet()
 	promise := notif.Subscribe(ctx, keys...)
 	for _, k := range keys {
@@ -90,23 +100,38 @@ func AsyncGetBlocks(ctx, sessctx context.Context, keys []cid.Cid, notif notifica
 	// Send the want request for the keys to the network
 	want(ctx, keys)
 
-	go handleIncoming(ctx, sessctx, remaining, promise, out, cwants)
+	go func() {
+		defer func() {
+			for _, done := range finished {
+				done()
+			}
+		}()
+		handleIncoming(ctx, sessctx, remaining, promise, out, cwants, func() {
+			cancel()
+			// A cancelled subscription owns its notifier until that channel is closed.
+			for range promise {
+			}
+		})
+	}()
 	return out, nil
 }
 
 // Listens for incoming blocks, passing them to the out channel.
 // If the context is cancelled or the incoming channel closes, calls cfun with
 // any keys corresponding to blocks that were never received.
-func handleIncoming(ctx, sessctx context.Context, remaining *cid.Set, in <-chan blocks.Block, out chan blocks.Block, cfun func([]cid.Cid)) {
+func handleIncoming(ctx, sessctx context.Context, remaining *cid.Set, in <-chan blocks.Block, out chan blocks.Block, cfun func([]cid.Cid), finished ...func()) {
 	ctx, span := internal.StartSpan(ctx, "Getter.handleIncoming") // ProbeLab: don't delete/change span without notice
 	defer span.End()
 
 	// Clean up before exiting this function, and call the cancel function on
 	// any remaining keys
 	defer func() {
-		close(out)
 		// can't just defer this call on its own, arguments are resolved *when* the defer is created
 		cfun(remaining.Keys())
+		for _, done := range finished {
+			done()
+		}
+		close(out)
 	}()
 
 	ctxDone := ctx.Done()

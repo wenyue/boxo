@@ -105,19 +105,20 @@ func (ps *impl) Subscribe(ctx context.Context, keys ...cid.Cid) <-chan blocks.Bl
 	ps.wrapped.AddSubOnceEach(valuesCh, toStrings(keys)...)
 	go func() {
 		defer func() {
-			close(blocksCh)
-
 			ps.lk.RLock()
-			defer ps.lk.RUnlock()
 			// Don't touch the pubsub instance if we're
 			// already closed.
 			select {
 			case <-ps.closed:
-				return
 			default:
+				ps.wrapped.Unsub(valuesCh)
 			}
-
-			ps.wrapped.Unsub(valuesCh)
+			ps.lk.RUnlock()
+			// Unsub and Shutdown enqueue commands. Channel closure acknowledges
+			// that the subscription has actually been removed by the dispatcher.
+			for range valuesCh {
+			}
+			close(blocksCh)
 		}()
 
 		for {

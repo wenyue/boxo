@@ -126,7 +126,12 @@ func (fpf *fakeProviderFinder) FindProvidersAsync(ctx context.Context, k cid.Cid
 		}
 	}()
 
-	return make(chan peer.AddrInfo)
+	out := make(chan peer.AddrInfo)
+	go func() {
+		<-ctx.Done()
+		close(out)
+	}()
+	return out
 }
 
 type wantReq struct {

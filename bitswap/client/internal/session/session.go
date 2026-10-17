@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/ipfs/boxo/bitswap/client/internal"
@@ -101,6 +102,11 @@ type op struct {
 // explicitly closed via the Close() method when no longer needed. The session's
 // internal context is used for provider discovery and other long-running operations.
 type Session struct {
+	workMu     sync.Mutex
+	closing    bool
+	requests   sync.WaitGroup
+	background sync.WaitGroup
+	done       chan struct{}
 	// dependencies
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -161,6 +167,7 @@ func New(
 	ctx, cancel := context.WithCancel(ctx)
 
 	s := &Session{
+		done:                make(chan struct{}),
 		sw:                  newSessionWants(broadcastLiveWantsLimit),
 		tickDelayReqs:       make(chan time.Duration),
 		ctx:                 ctx,
@@ -196,6 +203,23 @@ func (s *Session) ID() uint64 {
 // Close, the session should not be used anymore.
 func (s *Session) Close() {
 	s.cancel()
+}
+
+// CloseAndWait stops this session and joins its requests, discovery and cleanup.
+// It does not close the shared Bitswap client or its node-owned network workers.
+func (s *Session) CloseAndWait() {
+	s.cancel()
+	<-s.done
+}
+
+func (s *Session) admitWork(group *sync.WaitGroup) bool {
+	s.workMu.Lock()
+	defer s.workMu.Unlock()
+	if s.closing || s.ctx.Err() != nil {
+		return false
+	}
+	group.Add(1)
+	return true
 }
 
 // ReceiveFrom receives incoming blocks from the given peer.
@@ -252,8 +276,11 @@ func (s *Session) GetBlock(ctx context.Context, k cid.Cid) (blocks.Block, error)
 func (s *Session) GetBlocks(ctx context.Context, keys []cid.Cid) (<-chan blocks.Block, error) {
 	ctx, span := internal.StartSpan(ctx, "Session.GetBlocks")
 	defer span.End()
+	if !s.admitWork(&s.requests) {
+		return nil, context.Canceled
+	}
 
-	return bsgetter.AsyncGetBlocks(ctx, s.ctx, keys, s.notif,
+	result, err := bsgetter.AsyncGetBlocks(ctx, s.ctx, keys, s.notif,
 		func(ctx context.Context, keys []cid.Cid) {
 			select {
 			case s.incoming <- op{op: opWant, keys: keys}:
@@ -267,7 +294,12 @@ func (s *Session) GetBlocks(ctx context.Context, keys []cid.Cid) (<-chan blocks.
 			case <-s.ctx.Done():
 			}
 		},
+		s.requests.Done,
 	)
+	if err != nil {
+		s.requests.Done()
+	}
+	return result, err
 }
 
 // SetBaseTickDelay changes the rate at which ticks happen.
@@ -298,7 +330,11 @@ func (s *Session) nonBlockingEnqueue(o op) {
 	select {
 	case s.incoming <- o:
 	default:
+		if !s.admitWork(&s.background) {
+			return
+		}
 		go func() {
+			defer s.background.Done()
 			select {
 			case s.incoming <- o:
 			case <-s.ctx.Done():
@@ -310,6 +346,14 @@ func (s *Session) nonBlockingEnqueue(o op) {
 // run is the session run loop. Everything in this function should not be
 // called outside of this loop.
 func (s *Session) run(ctx context.Context) {
+	defer func() {
+		s.workMu.Lock()
+		s.closing = true
+		s.workMu.Unlock()
+		s.requests.Wait()
+		s.background.Wait()
+		close(s.done)
+	}()
 	go s.sws.Run()
 
 	s.idleTick = time.NewTimer(s.initialSearchDelay)
@@ -420,7 +464,11 @@ func (s *Session) findMorePeers(ctx context.Context, c cid.Cid) {
 	if s.providerFinder == nil {
 		return
 	}
+	if !s.admitWork(&s.background) {
+		return
+	}
 	go func(k cid.Cid) {
+		defer s.background.Done()
 		ctx, span := internal.StartSpan(ctx, "Session.FindMorePeers")
 		defer span.End()
 		for p := range s.providerFinder.FindProvidersAsync(ctx, k, 0) {
